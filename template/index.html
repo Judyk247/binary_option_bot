@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Binary Options Signal Dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    /* small inline fallback styles if style.css is missing */
+    .loading { color: #9fb3d9; font-size: 14px; margin-bottom: 8px; }
+    table { width:100%; border-collapse: collapse; margin-top:12px; }
+    thead th { text-align:left; color:#9fb3d9; padding:8px 12px; font-weight:600;}
+    tbody td { background: #0f1724; padding:12px; border-top:1px solid #152131; color:#e5eefc; }
+    .badge { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:50%; background:#33425c; color:#9fb3d9; font-weight:700; margin-right:10px; }
+    .badge.on { background: rgba(24,201,100,0.18); color:#18c964; border:1px solid rgba(24,201,100,0.45); }
+    .label { font-size:12px; padding:4px 8px; border-radius:999px; margin-right:6px; }
+    .label.buy { color:#18c964; background: rgba(24,201,100,0.06); border:1px solid rgba(24,201,100,0.12); }
+    .label.sell { color:#ff4d4f; background: rgba(255,77,79,0.06); border:1px solid rgba(255,77,79,0.12); }
+    .symbol { font-weight:700; }
+    .topbar { display:flex; gap:12px; align-items:center; justify-content:space-between; margin-bottom:8px; }
+    .controls { display:flex; gap:8px; align-items:center; }
+    .small { font-size:13px; color:#9fb3d9; }
+    .search { padding:8px 10px; border-radius:8px; background:#0f1724; border:1px solid #152131; color:#e5eefc; }
+  </style>
+</head>
+<body>
+  <div class="container" style="max-width:1100px;margin:28px auto;padding:0 12px;">
+    <div class="topbar">
+      <div>
+        <h1 style="margin:0 0 4px;">Binary Options Signal Dashboard</h1>
+        <div class="small">Live signals — timeframes: 1m · 2m · 3m · 5m</div>
+      </div>
+
+      <div class="controls">
+        <div id="last-updated" class="small">last update: —</div>
+        <input id="filter-input" class="search" placeholder="Filter pairs (e.g. EUR/USD)" />
+        <button id="refresh-btn" style="padding:8px 12px;border-radius:8px;background:#1a2740;color:#e5eefc;border:1px solid #152131;cursor:pointer;">Refresh</button>
+      </div>
+    </div>
+
+    <div id="status" class="loading">Loading signals…</div>
+
+    <table id="signals-table" aria-live="polite">
+      <thead>
+        <tr>
+          <th>Pair</th>
+          <th>1m</th>
+          <th>2m</th>
+          <th>3m</th>
+          <th>5m</th>
+        </tr>
+      </thead>
+      <tbody id="signals-body">
+        <!-- rows inserted by JS -->
+      </tbody>
+    </table>
+
+    <div style="margin-top:18px;color:#9fb3d9;font-size:13px;">
+      Note: page polls the server every 20 seconds. No authentication. Data source: Twelve Data.
+    </div>
+  </div>
+
+  <script>
+    const POLL_INTERVAL_MS = 20000; // 20s
+    const API_ENDPOINT = "/api/signals"; // must be implemented server-side
+    let lastData = [];
+    const statusEl = document.getElementById("status");
+    const bodyEl = document.getElementById("signals-body");
+    const lastUpdatedEl = document.getElementById("last-updated");
+    const filterInput = document.getElementById("filter-input");
+    const refreshBtn = document.getElementById("refresh-btn");
+
+    async function fetchSignals() {
+      try {
+        statusEl.textContent = "Updating signals…";
+        const resp = await fetch(API_ENDPOINT + "?_=" + Date.now(), { cache: "no-store" });
+        if (!resp.ok) throw new Error("Network response not ok");
+        const data = await resp.json();
+        lastData = data;
+        renderTable(data);
+        const now = new Date();
+        lastUpdatedEl.textContent = "last update: " + now.toLocaleString();
+        statusEl.textContent = "";
+      } catch (err) {
+        console.error("fetchSignals error:", err);
+        statusEl.textContent = "Failed to fetch signals — showing last cached results (if any).";
+      }
+    }
+
+    function renderCell(sig) {
+      const has = (sig && (sig.BUY || sig.SELL));
+      const wrapper = document.createElement("div");
+      wrapper.style.display = "flex";
+      wrapper.style.alignItems = "center";
+
+      const badge = document.createElement("span");
+      badge.className = "badge" + (has ? " on" : "");
+      badge.textContent = has ? "✓" : "—";
+      wrapper.appendChild(badge);
+
+      if (sig && sig.BUY) {
+        const lbl = document.createElement("span");
+        lbl.className = "label buy";
+        lbl.textContent = "BUY";
+        wrapper.appendChild(lbl);
+      }
+      if (sig && sig.SELL) {
+        const lbl = document.createElement("span");
+        lbl.className = "label sell";
+        lbl.textContent = "SELL";
+        wrapper.appendChild(lbl);
+      }
+
+      return wrapper;
+    }
+
+    function renderTable(rows) {
+      // optional filter
+      const filter = filterInput.value.trim().toUpperCase();
+      bodyEl.innerHTML = "";
+      if (!Array.isArray(rows)) return;
+
+      for (const row of rows) {
+        if (filter && !row.symbol.toUpperCase().includes(filter)) continue;
+        const tr = document.createElement("tr");
+
+        const tdSym = document.createElement("td");
+        tdSym.className = "symbol";
+        tdSym.textContent = row.symbol;
+        tdSym.style.padding = "12px";
+        tr.appendChild(tdSym);
+
+        for (const tf of ["1m","2m","3m","5m"]) {
+          const td = document.createElement("td");
+          td.style.verticalAlign = "middle";
+          td.appendChild(renderCell(row[tf]));
+          tr.appendChild(td);
+        }
+        bodyEl.appendChild(tr);
+      }
+
+      if (bodyEl.children.length === 0) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 5;
+        td.style.padding = "16px";
+        td.style.color = "#9fb3d9";
+        td.textContent = "No symbols match the filter or no data available.";
+        tr.appendChild(td);
+        bodyEl.appendChild(tr);
+      }
+    }
+
+    // Polling
+    let pollTimer = null;
+    async function startPolling() {
+      await fetchSignals(); // immediate
+      pollTimer = setInterval(fetchSignals, POLL_INTERVAL_MS);
+    }
+
+    refreshBtn.addEventListener("click", () => fetchSignals());
+    filterInput.addEventListener("input", () => renderTable(lastData));
+
+    // Start
+    startPolling();
+  </script>
+</body>
+          </html>
