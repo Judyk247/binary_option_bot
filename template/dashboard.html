@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Binary Options Signal Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Auto-refresh every 20 seconds -->
+  <meta http-equiv="refresh" content="20" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="container">
+    <h1>Binary Options Signals</h1>
+    <p class="subtitle">Live ✓ indicates conditions met (green). Page auto-refreshes every 20s.</p>
+
+    <div class="symbols-bar">
+      <form method="get" action="/">
+        <input type="text" name="symbols" placeholder="EUR/USD,GBP/USD,..." />
+        <button type="submit">Load Symbols</button>
+      </form>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Pair</th>
+          {% for tf in timeframes %}
+          <th>{{ tf }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td class="symbol">{{ row.symbol }}</td>
+          {% for tf in timeframes %}
+            {% set sig = row[tf] %}
+            <td class="cell">
+              <div class="sig-wrap">
+                <span class="badge {{ 'on' if sig.BUY or sig.SELL else 'off' }}">
+                  {% if sig.BUY or sig.SELL %}
+                    ✓
+                  {% else %}
+                    —
+                  {% endif %}
+                </span>
+                {% if sig.BUY %}<span class="label buy">BUY</span>{% endif %}
+                {% if sig.SELL %}<span class="label sell">SELL</span>{% endif %}
+              </div>
+            </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <footer>
+      <span>Web service only · Data: Twelve Data · No auth · No Telegram</span>
+    </footer>
+  </div>
+</body>
+</html>
