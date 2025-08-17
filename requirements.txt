@@ -9,3 +9,5 @@ twelvedata==1.2.7
 python-dotenv==1.0.1
 gunicorn==23.0.0
 Werkzeug==3.0.3
+setuptools>=65.5.1
+wheel>=0.38.4
