@@ -11,3 +11,5 @@ gunicorn==23.0.0
 Werkzeug==3.0.3
 setuptools>=65.5.1
 wheel>=0.38.4
+eventlet==0.36.1
+gevent==24.2.1
