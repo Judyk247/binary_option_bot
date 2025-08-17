@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trading Bot Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* Extra highlighting for Buy/Sell */
+    .buy-row {
+      background-color: rgba(0, 255, 0, 0.1);
+      color: green;
+      font-weight: bold;
+    }
+    .sell-row {
+      background-color: rgba(255, 0, 0, 0.1);
+      color: red;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>📊 Trading Bot Dashboard</h1>
+  </header>
+
+  <main>
+    <section id="dashboard">
+      <h2>Live Signals</h2>
+      <table id="signals-table">
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>Direction</th>
+            <th>Timeframe</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Signals will be injected here dynamically -->
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <footer>
+    <p>&copy; 2025 Trading Bot</p>
+  </footer>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>
