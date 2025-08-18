@@ -93,15 +93,52 @@ def prepare_indicators(df: pd.DataFrame):
     return df
 
 # ===============================
-# Core Strategies
+# Example Strategies
 # ===============================
 
-# (unchanged evaluators: evaluate_trend_reversal_5m, evaluate_trend_following, etc.)
-# — I kept them exactly the same, because they work as-is on DataFrame OHLC
+def evaluate_trend_reversal(df: pd.DataFrame):
+    """
+    Example: Simple oversold/overbought check with Stochastic.
+    """
+    last = df.iloc[-1]
+    if last["%K"] < 20 and last["%D"] < 20:
+        return "CALL"   # Buy
+    elif last["%K"] > 80 and last["%D"] > 80:
+        return "PUT"    # Sell
+    return None
 
-# Example usage inside app.py:
-#
-# raw_candles = pocket_option_api.get_candles("EURUSD_otc", "M5", 200)
-# df = format_pocket_option_candles(raw_candles)
-# signals = evaluate_trend_reversal_5m(df)
-# print(signals)
+def evaluate_trend_following(df: pd.DataFrame):
+    """
+    Example: EMA trend following.
+    """
+    last = df.iloc[-1]
+    if last["close"] > last["ema150"]:
+        return "CALL"
+    elif last["close"] < last["ema150"]:
+        return "PUT"
+    return None
+
+# ===============================
+# Entry Point for Runner
+# ===============================
+
+def check_signal(df: pd.DataFrame):
+    """
+    Main entry point for strategy_runner.py.
+    Runs indicators + strategies and returns a signal.
+    """
+    if len(df) < 200:
+        return None  # need enough candles
+
+    df = prepare_indicators(df)
+
+    # You can stack multiple strategies here
+    signal = evaluate_trend_reversal(df)
+    if signal:
+        return signal
+
+    signal = evaluate_trend_following(df)
+    if signal:
+        return signal
+
+    return None
