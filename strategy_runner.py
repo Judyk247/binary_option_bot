@@ -1,53 +1,78 @@
 # strategy_runner.py
+"""
+Strategy Runner
+---------------
+- Connects to Pocket Option WebSocket via PocketOptionWS
+- Feeds live candlestick data into strategy.py
+- Evaluates strategies on each new candle
+- Prints (or later sends) signals in real time
+"""
 
-import time
-import logging
+import asyncio
+import json
+import pandas as pd
+from datetime import datetime
+
 from pocket_option import PocketOptionWS
-from strategy import check_signal
+import strategy  # your existing strategy.py file with logic
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# Symbols & Timeframes to monitor
+SYMBOLS = ["EURUSD_otc", "GBPUSD_otc", "USDJPY_otc"]
+TIMEFRAME = 60  # seconds (1 minute candles)
 
-class StrategyRunner:
-    def __init__(self, symbol="EURUSD_otc", timeframe="M3"):
-        """
-        Strategy runner that connects Pocket Option WebSocket with trading strategy
-        :param symbol: The asset/pair to trade (default EURUSD_otc)
-        :param timeframe: Candle timeframe (default 3-minutes)
-        """
-        self.symbol = symbol
-        self.timeframe = timeframe
-        self.ws = PocketOptionWS()
+# Store candle history for each symbol
+candles_data = {symbol: [] for symbol in SYMBOLS}
 
-    def start(self):
-        logging.info(f"Starting Strategy Runner for {self.symbol} on {self.timeframe} timeframe...")
-        self.ws.connect()
+def process_candle(symbol, candle):
+    """Handle new candle and run strategy."""
+    # Append to local history
+    candles_data[symbol].append(candle)
+    
+    # Keep only the last 100 candles
+    if len(candles_data[symbol]) > 100:
+        candles_data[symbol] = candles_data[symbol][-100:]
 
-        try:
-            while True:
-                # Fetch latest candle history from WebSocket
-                candles = self.ws.get_candles(self.symbol, self.timeframe, limit=50)
-                if candles:
-                    # Run your strategy logic
-                    signal = check_signal(candles)
-                    if signal:
-                        logging.info(f"Signal detected: {signal} for {self.symbol} ({self.timeframe})")
-                        # TODO: send to Telegram or dashboard here
-                    else:
-                        logging.info("No valid signal detected")
-                else:
-                    logging.warning("No candles received yet...")
+    # Convert to DataFrame
+    df = pd.DataFrame(candles_data[symbol])
+    df["time"] = pd.to_datetime(df["time"], unit="s")
 
-                time.sleep(5)  # small delay before checking again
+    # Run strategy (must be implemented in strategy.py)
+    signal = strategy.check_signal(df)
 
-        except KeyboardInterrupt:
-            logging.info("Strategy runner stopped manually.")
-        finally:
-            self.ws.disconnect()
+    if signal:
+        print(f"[{datetime.utcnow()}] {symbol} - SIGNAL: {signal}")
 
+async def on_candle(symbol, data):
+    """Callback when a new candle is received."""
+    try:
+        candle = {
+            "time": data["time"],
+            "open": float(data["open"]),
+            "close": float(data["close"]),
+            "high": float(data["high"]),
+            "low": float(data["low"]),
+            "volume": float(data.get("volume", 0))
+        }
+        process_candle(symbol, candle)
+    except Exception as e:
+        print(f"Error processing candle for {symbol}: {e}")
+
+async def main():
+    ws = PocketOptionWS()
+
+    # Connect WebSocket
+    await ws.connect()
+
+    # Subscribe to candles for each symbol
+    for symbol in SYMBOLS:
+        await ws.subscribe_candles(symbol, TIMEFRAME, lambda data, s=symbol: asyncio.create_task(on_candle(s, data)))
+
+    # Keep alive
+    while True:
+        await asyncio.sleep(1)
 
 if __name__ == "__main__":
-    runner = StrategyRunner(symbol="EURUSD_otc", timeframe="M3")
-    runner.start()
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Stopped by user")
