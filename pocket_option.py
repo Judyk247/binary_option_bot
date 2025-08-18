@@ -1,11 +1,7 @@
 # pocket_option.py
 """
-Utility module to handle WebSocket connections to Pocket Option.
-Responsible for:
-- Connecting to Pocket Option WebSocket
-- Subscribing to currency pairs
-- Receiving live tick data
-- Handling reconnections on disconnect
+Utility module for connecting to Pocket Option WebSocket.
+Handles connection, subscriptions, and incoming price updates.
 """
 
 import json
@@ -13,37 +9,46 @@ import websocket
 import threading
 import time
 
+
 class PocketOptionWS:
-    def __init__(self, url="wss://ws.pocketoption.com/", symbols=None, on_message=None):
+    def __init__(self, on_message_callback=None):
         """
-        :param url: Pocket Option WebSocket endpoint
-        :param symbols: List of currency pairs (e.g., ["EURUSD_otc", "GBPUSD_otc"])
-        :param on_message: Callback function to handle received messages
+        Initialize WebSocket client for Pocket Option.
+
+        :param on_message_callback: Function to handle incoming price data
         """
-        self.url = url
-        self.symbols = symbols or []
-        self.on_message = on_message
         self.ws = None
         self.thread = None
-        self.connected = False
+        self.on_message_callback = on_message_callback
+        self.keep_running = False
+
+        # Pocket Option WebSocket endpoint (replace if different for OTC/live data)
+        self.url = "wss://ws.pocketoption.com/echo"
 
     def _on_open(self, ws):
         print("✅ Connected to Pocket Option WebSocket")
-        self.connected = True
-        # Subscribe to symbols
-        for symbol in self.symbols:
-            sub_msg = {
-                "command": "subscribeMessage",
-                "identifier": f"asset/{symbol}"
+
+        # Example subscription (replace with actual Pocket Option subscription format)
+        subscribe_msg = {
+            "method": "subscribe",
+            "params": {
+                "symbol": "EURUSD_otc",  # Example symbol
+                "interval": "M1"        # Example timeframe
             }
-            ws.send(json.dumps(sub_msg))
-            print(f"📡 Subscribed to {symbol}")
+        }
+        ws.send(json.dumps(subscribe_msg))
+        print("📡 Subscribed to EURUSD_otc M1")
 
     def _on_message(self, ws, message):
         try:
             data = json.loads(message)
-            if self.on_message:
-                self.on_message(data)
+            # Debug: print incoming data
+            # print("📩 Raw data:", data)
+
+            # If there's a callback, forward price data
+            if self.on_message_callback:
+                self.on_message_callback(data)
+
         except Exception as e:
             print(f"⚠️ Error parsing message: {e}")
 
@@ -51,49 +56,50 @@ class PocketOptionWS:
         print(f"❌ WebSocket error: {error}")
 
     def _on_close(self, ws, close_status_code, close_msg):
-        print("🔌 WebSocket connection closed")
-        self.connected = False
-        # Auto-reconnect after 5 seconds
-        time.sleep(5)
-        self.connect()
+        print("🔌 WebSocket closed")
 
-    def connect(self):
-        """Start WebSocket connection in a new thread"""
+    def start(self):
+        """Start WebSocket connection in a separate thread."""
+        self.keep_running = True
+        self.ws = websocket.WebSocketApp(
+            self.url,
+            on_open=self._on_open,
+            on_message=self._on_message,
+            on_error=self._on_error,
+            on_close=self._on_close,
+        )
+
         def run():
-            self.ws = websocket.WebSocketApp(
-                self.url,
-                on_open=self._on_open,
-                on_message=self._on_message,
-                on_error=self._on_error,
-                on_close=self._on_close
-            )
-            self.ws.run_forever()
+            while self.keep_running:
+                try:
+                    self.ws.run_forever()
+                except Exception as e:
+                    print(f"⚠️ Connection error: {e}")
+                    time.sleep(5)  # retry after delay
 
         self.thread = threading.Thread(target=run, daemon=True)
         self.thread.start()
 
-    def send(self, message: dict):
-        """Send raw message to WebSocket"""
-        if self.connected and self.ws:
-            self.ws.send(json.dumps(message))
-
-    def close(self):
-        """Close WebSocket connection"""
+    def stop(self):
+        """Stop WebSocket connection."""
+        self.keep_running = False
         if self.ws:
             self.ws.close()
-        self.connected = False
+        if self.thread:
+            self.thread.join(timeout=2)
+        print("🛑 Pocket Option WebSocket stopped")
 
 
-# Example usage
+# Quick test if run standalone
 if __name__ == "__main__":
-    def handle_message(data):
-        print("📩 Received:", data)
+    def handle_data(msg):
+        print("📊 Incoming data:", msg)
 
-    symbols = ["EURUSD_otc", "GBPUSD_otc"]  # Pocket Option OTC symbols
+    po = PocketOptionWS(on_message_callback=handle_data)
+    po.start()
 
-    ws_client = PocketOptionWS(symbols=symbols, on_message=handle_message)
-    ws_client.connect()
-
-    # Keep running
-    while True:
-        time.sleep(1)
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        po.stop()
