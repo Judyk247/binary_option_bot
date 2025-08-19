@@ -4,6 +4,7 @@ import time
 import logging
 from flask import Flask, render_template
 from flask_cors import CORS
+from flask_socketio import SocketIO
 from data_fetcher import PocketOptionFetcher
 from strategy import generate_signals
 from telegram_utils import send_telegram_message
@@ -11,8 +12,11 @@ from config import SYMBOLS, TIMEFRAMES, TELEGRAM_CHAT_IDS
 
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app)  # Allow access from mobile browser
+CORS(app)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
+
+# Initialize SocketIO
+socketio = SocketIO(app, async_mode="eventlet")
 
 # Setup logging
 logging.basicConfig(
@@ -28,23 +32,15 @@ fetcher = PocketOptionFetcher(SYMBOLS, TIMEFRAMES)
 fetcher.start()
 
 def get_live_data(symbol, timeframe, length=50):
-    """
-    Fetch the latest candlestick data for a given symbol and timeframe.
-    Falls back to empty DataFrame if no data yet.
-    """
     import pandas as pd
-
     candles = fetcher.get_candles(symbol, timeframe)
     if not candles:
         return pd.DataFrame()
-
     df = pd.DataFrame(candles)
-    return df.tail(length)  # return only the last N candles
+    return df.tail(length)
 
 def fetch_and_generate():
-    """Fetch live data and generate signals continuously."""
     global latest_signals
-
     while True:
         try:
             signals = {}
@@ -56,7 +52,6 @@ def fetch_and_generate():
                         signal = generate_signals(data, symbol, tf)
                         signals[symbol][tf] = signal
 
-                        # Send signal 30s before next candle close
                         if signal and "No Signal" not in signal:
                             now = time.time()
                             seconds_into_candle = int(now) % (int(tf[:-1]) * 60)
@@ -66,6 +61,9 @@ def fetch_and_generate():
                                         send_telegram_message(chat_id, signal)
                                     except Exception as send_err:
                                         logging.error(f"Failed to send Telegram message: {send_err}")
+
+                        # Push live update to dashboard
+                        socketio.emit("new_signal", {"symbol": symbol, "timeframe": tf, "signal": signal}, broadcast=True)
                     else:
                         signals[symbol][tf] = "No Data"
 
@@ -75,16 +73,14 @@ def fetch_and_generate():
         except Exception as e:
             logging.error(f"Error fetching/generating signals: {e}")
 
-        time.sleep(30)  # Recheck every 30s
+        time.sleep(30)
 
 @app.route("/")
 def dashboard():
     return render_template("dashboard.html", signals=latest_signals)
 
 if __name__ == "__main__":
-    # Start background thread for fetching signals
     worker_thread = threading.Thread(target=fetch_and_generate, daemon=True)
     worker_thread.start()
-    
-    logging.info("Starting Flask app on 0.0.0.0:5000")
-    app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
+    logging.info("Starting Flask-SocketIO app on 0.0.0.0:5000")
+    socketio.run(app, host="0.0.0.0", port=5000)
