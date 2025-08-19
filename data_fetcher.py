@@ -11,6 +11,42 @@ import websocket
 import time
 from collections import defaultdict
 
+# ------------------------------
+# Top-level function for app.py
+# ------------------------------
+_fetcher_instances = {}
+
+def get_live_data(symbols, timeframes):
+    """
+    Returns a dictionary of live candle data for given symbols and timeframes.
+    Example output: {
+        'EURUSD_1m': [...],
+        'EURUSD_2m': [...],
+        'GBPUSD_3m': [...],
+        'USDJPY_5m': [...]
+    }
+    """
+    global _fetcher_instances
+
+    # Create a unique key for this set of symbols+timeframes
+    key = "_".join(symbols) + "_" + "_".join(timeframes)
+
+    # Start fetcher if not already running
+    if key not in _fetcher_instances:
+        fetcher = PocketOptionFetcher(symbols, timeframes)
+        fetcher.start()
+        _fetcher_instances[key] = fetcher
+
+    # Collect latest candles
+    data = {}
+    fetcher = _fetcher_instances[key]
+    for symbol in symbols:
+        for tf in timeframes:
+            data_key = f"{symbol}_{tf}"
+            data[data_key] = fetcher.get_candles(symbol, tf)
+
+    return data
+    
 class PocketOptionFetcher:
     def __init__(self, pairs, timeframes):
         self.pairs = pairs
@@ -92,39 +128,3 @@ class PocketOptionFetcher:
         key = f"{symbol}_{timeframe}"
         with self.lock:
             return list(self.data.get(key, []))
-
-# ------------------------------
-# Top-level function for app.py
-# ------------------------------
-_fetcher_instances = {}
-
-def get_live_data(symbols, timeframes):
-    """
-    Returns a dictionary of live candle data for given symbols and timeframes.
-    Example output: {
-        'EURUSD_1m': [...],
-        'EURUSD_2m': [...],
-        'GBPUSD_3m': [...],
-        'USDJPY_5m': [...]
-    }
-    """
-    global _fetcher_instances
-
-    # Create a unique key for this set of symbols+timeframes
-    key = "_".join(symbols) + "_" + "_".join(timeframes)
-
-    # Start fetcher if not already running
-    if key not in _fetcher_instances:
-        fetcher = PocketOptionFetcher(symbols, timeframes)
-        fetcher.start()
-        _fetcher_instances[key] = fetcher
-
-    # Collect latest candles
-    data = {}
-    fetcher = _fetcher_instances[key]
-    for symbol in symbols:
-        for tf in timeframes:
-            data_key = f"{symbol}_{tf}"
-            data[data_key] = fetcher.get_candles(symbol, tf)
-
-    return data
