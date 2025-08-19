@@ -93,7 +93,6 @@ class PocketOptionFetcher:
         with self.lock:
             return list(self.data.get(key, []))
 
-
 # ------------------------------
 # Top-level function for app.py
 # ------------------------------
@@ -102,22 +101,30 @@ _fetcher_instances = {}
 def get_live_data(symbols, timeframes):
     """
     Returns a dictionary of live candle data for given symbols and timeframes.
-    Example output: {'EURUSD_1m': [...], 'GBPUSD_3m': [...]}
+    Example output: {
+        'EURUSD_1m': [...],
+        'EURUSD_2m': [...],
+        'GBPUSD_3m': [...],
+        'USDJPY_5m': [...]
+    }
     """
     global _fetcher_instances
 
-    # create a single fetcher if not already running
+    # Create a unique key for this set of symbols+timeframes
     key = "_".join(symbols) + "_" + "_".join(timeframes)
+
+    # Start fetcher if not already running
     if key not in _fetcher_instances:
         fetcher = PocketOptionFetcher(symbols, timeframes)
         fetcher.start()
         _fetcher_instances[key] = fetcher
 
-    # collect latest candles
+    # Collect latest candles
     data = {}
     fetcher = _fetcher_instances[key]
     for symbol in symbols:
         for tf in timeframes:
             data_key = f"{symbol}_{tf}"
             data[data_key] = fetcher.get_candles(symbol, tf)
+
     return data
