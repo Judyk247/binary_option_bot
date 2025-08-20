@@ -27,18 +27,21 @@ logging.basicConfig(
 latest_signals = {}
 
 # --- Initialize global fetcher instance ---
-fetcher = PocketOptionFetcher(
-    symbols=SYMBOLS,
-    timeframes=TIMEFRAMES
-)
+fetcher = PocketOptionFetcher(symbols=SYMBOLS, timeframes=TIMEFRAMES)
 fetcher.start()
 
 def get_live_data(symbol, timeframe, length=50):
+    """Return last 'length' candles as DataFrame; safely handle missing or invalid data."""
     import pandas as pd
     candles = fetcher.get_candles(symbol, timeframe)
     if not candles or not isinstance(candles, list):
+        logging.warning(f"No candles for {symbol} {timeframe}")
         return pd.DataFrame()
-    df = pd.DataFrame(candles)
+    try:
+        df = pd.DataFrame(candles)
+    except Exception as e:
+        logging.error(f"Error converting candles to DataFrame for {symbol} {timeframe}: {e}")
+        return pd.DataFrame()
     return df.tail(length)
 
 def fetch_and_generate():
