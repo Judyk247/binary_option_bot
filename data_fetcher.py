@@ -10,7 +10,7 @@ load_dotenv()
 
 PO_EMAIL = os.getenv("PO_EMAIL")
 PO_PASSWORD = os.getenv("PO_PASSWORD")
-PO_API_BASE = os.getenv("PO_API_BASE")  # Now contains IP-based WS URL
+PO_API_BASE = os.getenv("PO_API_BASE")  # IP-based WS URL
 
 class PocketOptionFetcher:
     def __init__(self, symbols, timeframes):
@@ -62,7 +62,9 @@ class PocketOptionFetcher:
             on_error=on_error,
             on_close=on_close,
         )
-        self.ws.run_forever()
+
+        # Disable SSL verification for IP-based WS
+        self.ws.run_forever(sslopt={"cert_reqs": 0})
 
     def _login(self, ws):
         login_payload = {
