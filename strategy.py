@@ -64,17 +64,10 @@ def fractal_low(df: pd.DataFrame):
 # ===============================
 
 def format_pocket_option_candles(candles: list) -> pd.DataFrame:
-    """
-    Convert Pocket Option raw JSON candles into DataFrame.
-    candles = [
-      {"time": 1690800000, "open": 1.1234, "high": 1.1250, "low": 1.1220, "close": 1.1240},
-      ...
-    ]
-    """
     df = pd.DataFrame(candles)
-    df["time"] = pd.to_datetime(df["time"], unit="s")   # convert unix seconds → datetime
+    df["time"] = pd.to_datetime(df["time"], unit="s")
     df.set_index("time", inplace=True)
-    df = df[["open", "high", "low", "close"]]           # enforce order
+    df = df[["open", "high", "low", "close"]]
     return df
 
 # ===============================
@@ -97,20 +90,14 @@ def prepare_indicators(df: pd.DataFrame):
 # ===============================
 
 def evaluate_trend_reversal(df: pd.DataFrame):
-    """
-    Example: Simple oversold/overbought check with Stochastic.
-    """
     last = df.iloc[-1]
     if last["%K"] < 20 and last["%D"] < 20:
-        return "CALL"   # Buy
+        return "CALL"
     elif last["%K"] > 80 and last["%D"] > 80:
-        return "PUT"    # Sell
+        return "PUT"
     return None
 
 def evaluate_trend_following(df: pd.DataFrame):
-    """
-    Example: EMA trend following.
-    """
     last = df.iloc[-1]
     if last["close"] > last["ema150"]:
         return "CALL"
@@ -119,26 +106,26 @@ def evaluate_trend_following(df: pd.DataFrame):
     return None
 
 # ===============================
-# Entry Point for Runner
+# Unified Signal Generator
 # ===============================
 
-def check_signal(df: pd.DataFrame):
+def generate_signals(df: pd.DataFrame, symbol: str, timeframe: str):
     """
-    Main entry point for strategy_runner.py.
-    Runs indicators + strategies and returns a signal.
+    Unified entry point for app.py.
+    Uses trend-following for 1m/2m/3m and trend-reversal for 5m.
     """
     if len(df) < 200:
-        return None  # need enough candles
+        return "No Signal (insufficient data)"
 
     df = prepare_indicators(df)
 
-    # You can stack multiple strategies here
-    signal = evaluate_trend_reversal(df)
-    if signal:
-        return signal
+    if timeframe in ["1m", "2m", "3m"]:
+        signal = evaluate_trend_following(df)
+    elif timeframe == "5m":
+        signal = evaluate_trend_reversal(df)
+    else:
+        signal = None
 
-    signal = evaluate_trend_following(df)
     if signal:
-        return signal
-
-    return None
+        return f"{signal} | {symbol} | {timeframe}"
+    return "No Signal"
