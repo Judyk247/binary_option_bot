@@ -8,7 +8,7 @@ from flask_socketio import SocketIO
 from data_fetcher import PocketOptionFetcher
 from strategy import generate_signals
 from telegram_utils import send_telegram_message
-from config import SYMBOLS, TIMEFRAMES, TELEGRAM_CHAT_IDS
+from config import SYMBOLS, TIMEFRAMES, TELEGRAM_CHAT_IDS, PO_API_BASE, PO_EMAIL, PO_PASSWORD
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -28,7 +28,13 @@ logging.basicConfig(
 latest_signals = {}
 
 # --- Initialize global fetcher instance ---
-fetcher = PocketOptionFetcher(SYMBOLS, TIMEFRAMES)
+fetcher = PocketOptionFetcher(
+    email=PO_EMAIL,
+    password=PO_PASSWORD,
+    api_base=PO_API_BASE,
+    symbols=SYMBOLS,
+    timeframes=TIMEFRAMES
+)
 fetcher.start()
 
 def get_live_data(symbol, timeframe, length=50):
@@ -63,7 +69,11 @@ def fetch_and_generate():
                                         logging.error(f"Failed to send Telegram message: {send_err}")
 
                         # Push live update to dashboard
-                        socketio.emit("new_signal", {"symbol": symbol, "timeframe": tf, "signal": signal}, broadcast=True)
+                        socketio.emit(
+                            "new_signal",
+                            {"symbol": symbol, "timeframe": tf, "signal": signal},
+                            broadcast=True
+                        )
                     else:
                         signals[symbol][tf] = "No Data"
 
