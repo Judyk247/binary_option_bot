@@ -40,13 +40,18 @@ class PocketOptionFetcher:
             self._login(ws)
 
         def on_message(ws, message):
-            data = json.loads(message)
-            # Example: store candle data
-            if "candles" in data:
-                symbol = data.get("symbol")
-                timeframe = data.get("timeframe")
-                if symbol and timeframe:
-                    self.candles_data[symbol][timeframe] = data["candles"]
+            try:
+                data = json.loads(message)
+            except (json.JSONDecodeError, TypeError):
+                print("[PocketOptionFetcher] Received invalid JSON, ignoring")
+                return
+
+            # Store candle data safely
+            candles = data.get("candles")
+            symbol = data.get("symbol")
+            timeframe = data.get("timeframe")
+            if candles and symbol in self.symbols and timeframe in self.timeframes:
+                self.candles_data[symbol][timeframe] = candles
 
         def on_error(ws, error):
             print(f"[PocketOptionFetcher] WebSocket error: {error}")
@@ -67,6 +72,9 @@ class PocketOptionFetcher:
         self.ws.run_forever(sslopt={"cert_reqs": 0})
 
     def _login(self, ws):
+        if not PO_EMAIL or not PO_PASSWORD:
+            print("[PocketOptionFetcher] Missing PO_EMAIL or PO_PASSWORD in .env")
+            return
         login_payload = {
             "action": "login",
             "email": PO_EMAIL,
@@ -76,5 +84,5 @@ class PocketOptionFetcher:
         print("[PocketOptionFetcher] Login request sent.")
 
     def get_candles(self, symbol, timeframe):
-        # Return the latest candles for a symbol + timeframe
-        return self.candles_data.get(symbol, {}).get(timeframe, [])
+        # Safely return latest candles
+        return self.candles_data.get(symbol, {}).get(timeframe) or []
