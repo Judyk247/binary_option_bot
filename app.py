@@ -83,4 +83,4 @@ if __name__ == "__main__":
     worker_thread = threading.Thread(target=fetch_and_generate, daemon=True)
     worker_thread.start()
     logging.info("Starting Flask-SocketIO app on 0.0.0.0:5000")
-    socketio.run(app, host="0.0.0.0", port=5000)
+    socketio.run(app, host="0.0.0.0", port=5000, debug=True)  # ✅ Debug enabled
