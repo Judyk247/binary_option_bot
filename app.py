@@ -1,4 +1,3 @@
-# app.py
 import threading
 import time
 import logging
@@ -29,9 +28,6 @@ latest_signals = {}
 
 # --- Initialize global fetcher instance ---
 fetcher = PocketOptionFetcher(
-    email=PO_EMAIL,
-    password=PO_PASSWORD,
-    api_base=PO_API_BASE,
     symbols=SYMBOLS,
     timeframes=TIMEFRAMES
 )
