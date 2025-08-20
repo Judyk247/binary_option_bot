@@ -36,7 +36,7 @@ fetcher.start()
 def get_live_data(symbol, timeframe, length=50):
     import pandas as pd
     candles = fetcher.get_candles(symbol, timeframe)
-    if not candles:
+    if not candles or not isinstance(candles, list):
         return pd.DataFrame()
     df = pd.DataFrame(candles)
     return df.tail(length)
@@ -54,15 +54,17 @@ def fetch_and_generate():
                         signal = generate_signals(data, symbol, tf)
                         signals[symbol][tf] = signal
 
+                        # Only send Telegram message if signal is valid
                         if signal and "No Signal" not in signal:
                             now = time.time()
                             seconds_into_candle = int(now) % (int(tf[:-1]) * 60)
                             if seconds_into_candle >= (int(tf[:-1]) * 60 - 30):
                                 for chat_id in TELEGRAM_CHAT_IDS:
-                                    try:
-                                        send_telegram_message(chat_id, signal)
-                                    except Exception as send_err:
-                                        logging.error(f"Failed to send Telegram message: {send_err}")
+                                    if chat_id:  # ensure chat_id is valid
+                                        try:
+                                            send_telegram_message(chat_id, signal)
+                                        except Exception as send_err:
+                                            logging.error(f"Failed to send Telegram message: {send_err}")
 
                         # Push live update to dashboard
                         socketio.emit(
