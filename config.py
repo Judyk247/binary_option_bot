@@ -8,12 +8,12 @@ load_dotenv()
 PO_EMAIL = os.getenv("PO_EMAIL")
 PO_PASSWORD = os.getenv("PO_PASSWORD")
 
-# Pocket Option API/WebSocket base URL (using direct IP)
+# Pocket Option API/WebSocket base URL (using direct IP to bypass DNS)
 PO_API_BASE = "wss://185.104.210.34/quotes-service-v1/ws"
 
 # Telegram bot details
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_IDS = os.getenv("TELEGRAM_CHAT_IDS", "").split(",")  # multiple IDs supported
+TELEGRAM_CHAT_IDS = os.getenv("TELEGRAM_CHAT_IDS", "").split(",")  # Supports multiple IDs
 
 # Default trading symbols (Pocket Option currency pairs)
 SYMBOLS = [
