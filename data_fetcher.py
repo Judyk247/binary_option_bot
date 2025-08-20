@@ -1,130 +1,78 @@
 # data_fetcher.py
-"""
-Module to fetch live market data from Pocket Option.
-Handles websocket connection, reconnection, and streaming
-candlestick data for multiple timeframes.
-"""
-
+import os
 import json
+import time
 import threading
 import websocket
-import time
-from collections import defaultdict
+from dotenv import load_dotenv
 
-# ------------------------------
-# Top-level function for app.py
-# ------------------------------
-_fetcher_instances = {}
+# Load environment variables
+load_dotenv()
 
-def get_live_data(symbols, timeframes):
-    """
-    Returns a dictionary of live candle data for given symbols and timeframes.
-    Example output: {
-        'EURUSD_1m': [...],
-        'EURUSD_2m': [...],
-        'GBPUSD_3m': [...],
-        'USDJPY_5m': [...]
-    }
-    """
-    global _fetcher_instances
+PO_EMAIL = os.getenv("PO_EMAIL")
+PO_PASSWORD = os.getenv("PO_PASSWORD")
+PO_API_BASE = os.getenv("PO_API_BASE")
 
-    # Create a unique key for this set of symbols+timeframes
-    key = "_".join(symbols) + "_" + "_".join(timeframes)
-
-    # Start fetcher if not already running
-    if key not in _fetcher_instances:
-        fetcher = PocketOptionFetcher(symbols, timeframes)
-        fetcher.start()
-        _fetcher_instances[key] = fetcher
-
-    # Collect latest candles
-    data = {}
-    fetcher = _fetcher_instances[key]
-    for symbol in symbols:
-        for tf in timeframes:
-            data_key = f"{symbol}_{tf}"
-            data[data_key] = fetcher.get_candles(symbol, tf)
-
-    return data
-    
 class PocketOptionFetcher:
-    def __init__(self, pairs, timeframes):
-        self.pairs = pairs
+    def __init__(self, symbols, timeframes):
+        self.symbols = symbols
         self.timeframes = timeframes
         self.ws = None
-        self.data = defaultdict(list)  # stores candles per symbol+timeframe
-        self.keep_running = True
-        self.lock = threading.Lock()
-
-    def _on_message(self, ws, message):
-        try:
-            msg = json.loads(message)
-            if "candle" in msg:
-                symbol = msg["candle"]["symbol"]
-                tf = str(msg["candle"]["tf"])
-                candle = {
-                    "time": msg["candle"]["time"],
-                    "open": float(msg["candle"]["open"]),
-                    "high": float(msg["candle"]["high"]),
-                    "low": float(msg["candle"]["low"]),
-                    "close": float(msg["candle"]["close"])
-                }
-                key = f"{symbol}_{tf}"
-                with self.lock:
-                    self.data[key].append(candle)
-                    # keep last 100 candles
-                    if len(self.data[key]) > 100:
-                        self.data[key] = self.data[key][-100:]
-        except Exception as e:
-            print("Error parsing message:", e)
-
-    def _on_error(self, ws, error):
-        print("WebSocket error:", error)
-
-    def _on_close(self, ws, close_status_code, close_msg):
-        print("WebSocket closed:", close_status_code, close_msg)
-        # attempt reconnect
-        if self.keep_running:
-            time.sleep(5)
-            self._connect()
-
-    def _on_open(self, ws):
-        print("WebSocket connection established.")
-        # subscribe to chosen pairs and timeframes
-        for symbol in self.pairs:
-            for tf in self.timeframes:
-                sub_msg = {
-                    "event": "subscribe",
-                    "symbol": symbol,
-                    "tf": tf
-                }
-                ws.send(json.dumps(sub_msg))
-
-    def _connect(self):
-        url = "wss://ws.pocketoption.com/echo"  # pocket option ws endpoint
-        self.ws = websocket.WebSocketApp(
-            url,
-            on_message=self._on_message,
-            on_error=self._on_error,
-            on_close=self._on_close,
-            on_open=self._on_open
-        )
-        wst = threading.Thread(target=self.ws.run_forever, daemon=True)
-        wst.start()
+        self.candles_data = {sym: {tf: [] for tf in timeframes} for sym in symbols}
+        self.connected = False
+        self.thread = None
 
     def start(self):
-        self.keep_running = True
-        self._connect()
+        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.thread.start()
 
-    def stop(self):
-        self.keep_running = False
-        if self.ws:
-            self.ws.close()
+    def _run(self):
+        while True:
+            try:
+                self._connect()
+            except Exception as e:
+                print(f"[PocketOptionFetcher] Connection error: {e}")
+            time.sleep(5)  # Reconnect delay
+
+    def _connect(self):
+        def on_open(ws):
+            print("[PocketOptionFetcher] WebSocket opened.")
+            self.connected = True
+            self._login(ws)
+
+        def on_message(ws, message):
+            data = json.loads(message)
+            # Example: store candle data
+            if "candles" in data:
+                symbol = data["symbol"]
+                timeframe = data["timeframe"]
+                self.candles_data[symbol][timeframe] = data["candles"]
+
+        def on_error(ws, error):
+            print(f"[PocketOptionFetcher] WebSocket error: {error}")
+
+        def on_close(ws, close_status_code, close_msg):
+            print(f"[PocketOptionFetcher] WebSocket closed: {close_status_code}, {close_msg}")
+            self.connected = False
+
+        self.ws = websocket.WebSocketApp(
+            PO_API_BASE,
+            on_open=on_open,
+            on_message=on_message,
+            on_error=on_error,
+            on_close=on_close,
+        )
+        self.ws.run_forever()
+
+    def _login(self, ws):
+        login_payload = {
+            "action": "login",
+            "email": PO_EMAIL,
+            "password": PO_PASSWORD
+        }
+        ws.send(json.dumps(login_payload))
+        print("[PocketOptionFetcher] Login request sent.")
 
     def get_candles(self, symbol, timeframe):
-        """
-        Returns latest candle data for symbol+timeframe.
-        """
-        key = f"{symbol}_{timeframe}"
-        with self.lock:
-            return list(self.data.get(key, []))
+        # Return the latest candles for a symbol + timeframe
+        return self.candles_data.get(symbol, {}).get(timeframe, [])
