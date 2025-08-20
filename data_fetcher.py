@@ -1,4 +1,3 @@
-# data_fetcher.py
 import os
 import json
 import time
@@ -11,7 +10,7 @@ load_dotenv()
 
 PO_EMAIL = os.getenv("PO_EMAIL")
 PO_PASSWORD = os.getenv("PO_PASSWORD")
-PO_API_BASE = os.getenv("PO_API_BASE")
+PO_API_BASE = os.getenv("PO_API_BASE")  # Now contains IP-based WS URL
 
 class PocketOptionFetcher:
     def __init__(self, symbols, timeframes):
@@ -44,9 +43,10 @@ class PocketOptionFetcher:
             data = json.loads(message)
             # Example: store candle data
             if "candles" in data:
-                symbol = data["symbol"]
-                timeframe = data["timeframe"]
-                self.candles_data[symbol][timeframe] = data["candles"]
+                symbol = data.get("symbol")
+                timeframe = data.get("timeframe")
+                if symbol and timeframe:
+                    self.candles_data[symbol][timeframe] = data["candles"]
 
         def on_error(ws, error):
             print(f"[PocketOptionFetcher] WebSocket error: {error}")
