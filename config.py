@@ -8,9 +8,8 @@ load_dotenv()
 PO_EMAIL = os.getenv("PO_EMAIL")
 PO_PASSWORD = os.getenv("PO_PASSWORD")
 
-# Pocket Option API/WebSocket base URL
-# (WebSocket: "wss://ws.pocketoption.com/quotes-service-v1/ws" OR REST endpoint if you’re polling)
-PO_API_BASE = "wss://ws.pocketoption.com/quotes-service-v1/ws"
+# Pocket Option API/WebSocket base URL (using direct IP)
+PO_API_BASE = "wss://185.104.210.34/quotes-service-v1/ws"
 
 # Telegram bot details
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
