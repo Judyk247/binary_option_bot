@@ -7,7 +7,7 @@ from flask_socketio import SocketIO
 from data_fetcher import PocketOptionFetcher
 from strategy import generate_signals
 from telegram_utils import send_telegram_message
-from config import SYMBOLS, TIMEFRAMES, TELEGRAM_CHAT_IDS, PO_API_BASE, PO_EMAIL, PO_PASSWORD
+from config import SYMBOLS, TIMEFRAMES, TELEGRAM_CHAT_IDS
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -89,4 +89,4 @@ if __name__ == "__main__":
     worker_thread = threading.Thread(target=fetch_and_generate, daemon=True)
     worker_thread.start()
     logging.info("Starting Flask-SocketIO app on 0.0.0.0:5000")
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True)  # ✅ Debug enabled
+    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
