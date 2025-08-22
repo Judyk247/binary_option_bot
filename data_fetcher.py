@@ -1,102 +1,110 @@
-import os
+# data_fetcher.py
+import asyncio
 import json
+import websockets
+from credentials import POCKET_SESSION_TOKEN, POCKET_USER_ID, POCKET_ACCOUNT_URL
+from collections import defaultdict
 import time
-import threading
-import websocket
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Store incoming data for all assets and timeframes
+market_data = defaultdict(lambda: {"ticks": [], "candles": defaultdict(list)})
 
-PO_EMAIL = os.getenv("PO_EMAIL")
-PO_PASSWORD = os.getenv("PO_PASSWORD")
-PO_API_BASE = os.getenv("PO_API_BASE")  # IP-based WS URL
+# Supported candle periods in seconds
+CANDLE_PERIODS = [60, 120, 180, 300]  # 1m, 2m, 3m, 5m
 
-class PocketOptionFetcher:
-    def __init__(self, symbols, timeframes):
-        self.symbols = symbols
-        self.timeframes = timeframes
-        self.ws = None
-        self.candles_data = {sym: {tf: [] for tf in timeframes} for sym in symbols}
-        self.connected = False
-        self.thread = None
+async def subscribe_assets(ws):
+    """Request assets list and subscribe to all active pairs"""
+    # Request all assets
+    await ws.send(json.dumps([42, ["getAssets", {}]]))
+    
+    while True:
+        message = await ws.recv()
+        if message.startswith("42"):
+            data = json.loads(message[2:])
+            event = data[0]
+            payload = data[1] if len(data) > 1 else None
 
-    def start(self):
-        self.thread = threading.Thread(target=self._run, daemon=True)
-        self.thread.start()
+            if event == "assets":
+                assets = [a["symbol"] for a in payload if a.get("enabled")]
+                print(f"[SUBSCRIBE] Found {len(assets)} assets, subscribing...")
 
-    def _run(self):
-        while True:
-            try:
-                self._connect()
-            except Exception as e:
-                print(f"[PocketOptionFetcher] Connection error: {e}")
-            time.sleep(5)  # Reconnect delay
+                for asset in assets:
+                    # Subscribe to ticks
+                    await ws.send(json.dumps([42, ["subscribe", {"type": "ticks", "asset": asset}]]))
+                    # Subscribe to candles for all periods
+                    for period in CANDLE_PERIODS:
+                        await ws.send(json.dumps([42, ["subscribe", {"type": "candles", "asset": asset, "period": period}]]))
+                return assets
 
-    def _connect(self):
-        def on_open(ws):
-            print("[PocketOptionFetcher] WebSocket opened.")
-            self.connected = True
-            self._login(ws)
+async def process_message(message):
+    """Process incoming WebSocket messages"""
+    if not message.startswith("42"):
+        return
 
-        def on_message(ws, message):
-            try:
-                if not message:  # Empty or None
-                    print("[PocketOptionFetcher] Empty message received, skipping")
-                    return
+    try:
+        data = json.loads(message[2:])
+        event = data[0]
+        payload = data[1] if len(data) > 1 else None
 
-                data = json.loads(message)
+        if event == "ticks" and payload:
+            asset = payload["asset"]
+            tick = {"time": payload["time"], "price": payload["price"]}
+            market_data[asset]["ticks"].append(tick)
 
-                if not isinstance(data, dict):  # Ensure parsed JSON is a dict
-                    print(f"[PocketOptionFetcher] Unexpected data format: {data}")
-                    return
+        elif event == "candles" and payload:
+            asset = payload["asset"]
+            period = payload["period"]
+            candle = {
+                "time": payload["time"],
+                "open": payload["open"],
+                "high": payload["high"],
+                "low": payload["low"],
+                "close": payload["close"],
+                "volume": payload["volume"],
+            }
+            market_data[asset]["candles"][period].append(candle)
 
-                # Store candle data safely
-                candles = data.get("candles")
-                symbol = data.get("symbol")
-                timeframe = data.get("timeframe")
+    except Exception as e:
+        print("[ERROR parsing message]", e)
 
-                if candles and symbol in self.symbols and timeframe in self.timeframes:
-                    self.candles_data[symbol][timeframe] = candles
-                else:
-                    # Debug log for unrecognized messages
-                    print(f"[PocketOptionFetcher] Ignored message: {data}")
+async def connect_pocket():
+    url = "wss://ws.pocketoption.com/socket.io/?EIO=3&transport=websocket"
+    while True:  # Auto-reconnect loop
+        try:
+            async with websockets.connect(url) as ws:
+                # Authentication
+                auth_message = [
+                    42,
+                    [
+                        "auth",
+                        {
+                            "sessionToken": POCKET_SESSION_TOKEN,
+                            "uid": POCKET_USER_ID,
+                            "lang": "en",
+                            "currentUrl": POCKET_ACCOUNT_URL,
+                            "isChart": 1,
+                        },
+                    ],
+                ]
+                await ws.send(json.dumps(auth_message))
+                print(f"[OPEN] Connected to Pocket Option ({POCKET_ACCOUNT_URL})")
 
-            except (json.JSONDecodeError, TypeError) as e:
-                print(f"[PocketOptionFetcher] JSON parse error: {e}, message: {message}")
-            except Exception as e:
-                print(f"[PocketOptionFetcher] Unexpected error in on_message: {e}")
+                assets = await subscribe_assets(ws)
 
-        def on_error(ws, error):
-            print(f"[PocketOptionFetcher] WebSocket error: {error}")
+                # Listen to messages
+                async for message in ws:
+                    await process_message(message)
 
-        def on_close(ws, close_status_code, close_msg):
-            print(f"[PocketOptionFetcher] WebSocket closed: {close_status_code}, {close_msg}")
-            self.connected = False
+        except websockets.exceptions.ConnectionClosed as e:
+            print(f"[CLOSE] Connection lost: {e}. Reconnecting in 5s...")
+            await asyncio.sleep(5)
+        except Exception as e:
+            print(f"[ERROR] {e}. Reconnecting in 5s...")
+            await asyncio.sleep(5)
 
-        self.ws = websocket.WebSocketApp(
-            PO_API_BASE,
-            on_open=on_open,
-            on_message=on_message,
-            on_error=on_error,
-            on_close=on_close,
-        )
+def get_market_data():
+    """Return the latest market data snapshot"""
+    return market_data
 
-        # Disable SSL verification for IP-based WS
-        self.ws.run_forever(sslopt={"cert_reqs": 0})
-
-    def _login(self, ws):
-        if not PO_EMAIL or not PO_PASSWORD:
-            print("[PocketOptionFetcher] Missing PO_EMAIL or PO_PASSWORD in .env")
-            return
-        login_payload = {
-            "action": "login",
-            "email": PO_EMAIL,
-            "password": PO_PASSWORD
-        }
-        ws.send(json.dumps(login_payload))
-        print("[PocketOptionFetcher] Login request sent.")
-
-    def get_candles(self, symbol, timeframe):
-        # Safely return latest candles
-        return self.candles_data.get(symbol, {}).get(timeframe) or []
+if __name__ == "__main__":
+    asyncio.run(connect_pocket())
