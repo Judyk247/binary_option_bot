@@ -1,111 +1,104 @@
 # trading_bot.py
 import asyncio
-import json
-import pandas as pd
-import websockets
+from data_fetcher import get_market_data, connect_pocket
 from datetime import datetime, timedelta
-from strategy import analyze_candles
-from credentials import POCKET_SESSION_TOKEN, POCKET_USER_ID, POCKET_ACCOUNT_URL, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-import requests
 
-POCKET_WS_URL = "wss://ws.pocketoption.com/echo"
+# Import strategy functions (EMA, Alligator, Stochastic, etc.)
+from strategy import (
+    calculate_ema,
+    calculate_alligator,
+    calculate_stochastic,
+    check_price_action_patterns,
+    calculate_atr
+)
 
 # Timeframes in seconds
-TIMEFRAMES = {
-    "1m": 60,
-    "2m": 120,
-    "3m": 180,
-    "5m": 300
-}
+TIMEFRAMES = [60, 120, 180, 300]  # 1m, 2m, 3m, 5m
 
-# Data storage for candles
-candles_data = {tf: {} for tf in TIMEFRAMES}  # symbol -> dataframe
+# Minimum number of candles to analyze
+HISTORICAL_CANDLES = 50
 
-# Telegram alert function
-def send_telegram_alert(symbol, signal, timeframe):
-    message = f"📈 Signal: {signal.upper()} | {symbol} | Timeframe: {timeframe} | Time: {datetime.utcnow()}"
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "text": message})
-    print("[TELEGRAM] Alert sent:", message)
+# Volatility filter threshold (ATR)
+ATR_THRESHOLD = 0.0005  # adjust per asset
 
-async def subscribe_assets(ws):
-    """Request assets list and subscribe to ticks + candles"""
-    await ws.send(json.dumps([42, ["getAssets", {}]]))
-    print("[SEND] Requested assets list")
+async def analyze_candles(asset, candles):
+    """
+    Analyze historical candles with full strategy:
+    - EMA-150 trend
+    - Alligator trend
+    - Stochastic (overbought/oversold)
+    - Price action pattern detection
+    - Volatility filter
+    """
+    signals = []
 
-async def handle_asset_event(ws, payload):
-    for asset in payload:
-        symbol = asset["symbol"]
-        if not asset.get("enabled"):
-            continue
-        for period in TIMEFRAMES.values():
-            msg = [42, ["subscribe", {"type": "candles", "asset": symbol, "period": period}]]
-            await ws.send(json.dumps(msg))
-        tick_msg = [42, ["subscribe", {"type": "ticks", "asset": symbol}]]
-        await ws.send(json.dumps(tick_msg))
-    print(f"[SUBSCRIBE] Subscribed to {len(payload)} assets")
+    if len(candles) < HISTORICAL_CANDLES:
+        return signals
 
-async def process_candle(symbol, timeframe, candle):
-    """Update local candle storage"""
-    if symbol not in candles_data[timeframe]:
-        candles_data[timeframe][symbol] = pd.DataFrame(columns=["open", "high", "low", "close"])
-    df = candles_data[timeframe][symbol]
-    new_row = {"open": candle["o"], "high": candle["h"], "low": candle["l"], "close": candle["c"]}
-    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-    if len(df) > 50:
-        df = df.iloc[-50:]  # keep last 50 candles
-    candles_data[timeframe][symbol] = df
+    recent_candles = candles[-HISTORICAL_CANDLES:]
 
-    # Analyze for signal
-    signal = analyze_candles(df)
-    if signal:
-        send_telegram_alert(symbol, signal, timeframe)
+    # Extract OHLC
+    opens = [c["open"] for c in recent_candles]
+    highs = [c["high"] for c in recent_candles]
+    lows = [c["low"] for c in recent_candles]
+    closes = [c["close"] for c in recent_candles]
 
-async def handle_message(ws, message):
-    if message.startswith("42"):
-        data = json.loads(message[2:])
-        event, payload = data[0], data[1] if len(data) > 1 else None
+    # EMA Trend
+    ema = calculate_ema(closes, period=150)
 
-        if event == "assets":
-            await handle_asset_event(ws, payload)
-        elif event == "candles":
-            symbol = payload["asset"]
-            period = payload["period"]
-            tf = next((k for k,v in TIMEFRAMES.items() if v==period), None)
-            if tf:
-                await process_candle(symbol, tf, payload)
+    # Alligator
+    jaw, teeth, lips = calculate_alligator(highs, lows, closes)
 
-async def connect_pocket():
+    # Stochastic
+    stochastic_k, stochastic_d = calculate_stochastic(highs, lows, closes, k_period=14, d_period=3)
+
+    # ATR Volatility
+    atr = calculate_atr(highs, lows, closes, period=14)
+    if atr < ATR_THRESHOLD:
+        return signals  # skip low-volatility setups
+
+    # Price action patterns
+    pa_signal = check_price_action_patterns(recent_candles)
+
+    # Strategy Conditions (simplified for clarity)
+    last_close = closes[-1]
+
+    # Buy Conditions
+    if (last_close > ema[-1] and last_close > jaw[-1] and last_close > teeth[-1] and last_close > lips[-1]
+        and stochastic_k[-1] < 30 and pa_signal == "bull"):
+        signals.append({"asset": asset, "type": "BUY", "time": datetime.utcnow()})
+
+    # Sell Conditions
+    if (last_close < ema[-1] and last_close < jaw[-1] and last_close < teeth[-1] and last_close < lips[-1]
+        and stochastic_k[-1] > 80 and pa_signal == "bear"):
+        signals.append({"asset": asset, "type": "SELL", "time": datetime.utcnow()})
+
+    return signals
+
+async def signal_loop():
+    """
+    Main loop to scan all assets continuously across all timeframes.
+    """
     while True:
-        try:
-            async with websockets.connect(POCKET_WS_URL) as ws:
-                # Auth message
-                auth_msg = [
-                    42,
-                    [
-                        "auth",
-                        {
-                            "sessionToken": POCKET_SESSION_TOKEN,
-                            "uid": POCKET_USER_ID,
-                            "lang": "en",
-                            "currentUrl": POCKET_ACCOUNT_URL,
-                            "isChart": 1
-                        },
-                    ],
-                ]
-                await ws.send(json.dumps(auth_msg))
-                print(f"[OPEN] Connected ✅ | {POCKET_ACCOUNT_URL}")
+        market_snapshot = get_market_data()
 
-                await subscribe_assets(ws)
+        for asset, data in market_snapshot.items():
+            for period in TIMEFRAMES:
+                candles = data["candles"].get(period, [])
+                signals = await analyze_candles(asset, candles)
 
-                while True:
-                    message = await ws.recv()
-                    await handle_message(ws, message)
+                for signal in signals:
+                    print(f"[SIGNAL] {signal['type']} {signal['asset']} | {period}s | {signal['time']}")
 
-        except Exception as e:
-            print("[ERROR] WebSocket error:", e)
-            print("🔄 Reconnecting in 5 seconds...")
-            await asyncio.sleep(5)
+        # Update dashboard every 1min
+        await asyncio.sleep(60)
+
+async def main():
+    # Run WebSocket connection and signal analysis concurrently
+    await asyncio.gather(
+        connect_pocket(),
+        signal_loop()
+    )
 
 if __name__ == "__main__":
-    asyncio.run(connect_pocket())
+    asyncio.run(main())
