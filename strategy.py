@@ -1,131 +1,103 @@
+# strategy.py
 import numpy as np
 import pandas as pd
 
-# ===============================
-# Utility & Indicator Functions
-# ===============================
+def heikin_ashi(df):
+    """Convert standard OHLC to Heikin Ashi candles."""
+    ha_df = df.copy()
+    ha_df['close'] = (df['open'] + df['high'] + df['low'] + df['close']) / 4
+    ha_df['open'] = (df['open'].shift(1) + df['close'].shift(1)) / 2
+    ha_df.iloc[0, ha_df.columns.get_loc('open')] = df['open'].iloc[0]
+    ha_df['high'] = ha_df[['open', 'close', 'high']].max(axis=1)
+    ha_df['low'] = ha_df[['open', 'close', 'low']].min(axis=1)
+    return ha_df
 
-def smma(series: pd.Series, length: int) -> pd.Series:
-    smma_vals = []
-    prev = np.nan
-    for i, val in enumerate(series):
-        if i == 0:
-            prev = val
-        else:
-            prev = (prev * (length - 1) + val) / length
-        smma_vals.append(prev)
-    return pd.Series(smma_vals, index=series.index)
+def calculate_atr(df, period=14):
+    """Average True Range for volatility filter."""
+    high_low = df['high'] - df['low']
+    high_close = np.abs(df['high'] - df['close'].shift(1))
+    low_close = np.abs(df['low'] - df['close'].shift(1))
+    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+    atr = tr.rolling(period).mean()
+    return atr
 
-def alligator(df: pd.DataFrame, jaw=15, teeth=8, lips=5):
-    median = (df["high"] + df["low"]) / 2.0
-    jaw_line = smma(median, jaw)
-    teeth_line = smma(median, teeth)
-    lips_line = smma(median, lips)
+def alligator_lines(df, jaw=13, teeth=8, lips=5):
+    """Calculate Alligator lines using SMAs of median price."""
+    median_price = (df['high'] + df['low']) / 2
+    jaw_line = median_price.rolling(jaw).mean()
+    teeth_line = median_price.rolling(teeth).mean()
+    lips_line = median_price.rolling(lips).mean()
     return jaw_line, teeth_line, lips_line
 
-def ema(series: pd.Series, length: int) -> pd.Series:
-    return series.ewm(span=length, adjust=False).mean()
+def stochastic_oscillator(df, k_period=14, d_period=3):
+    """Calculate Stochastic %K and %D"""
+    low_min = df['low'].rolling(k_period).min()
+    high_max = df['high'].rolling(k_period).max()
+    k = 100 * (df['close'] - low_min) / (high_max - low_min)
+    d = k.rolling(d_period).mean()
+    return k, d
 
-def atr(df: pd.DataFrame, length: int = 14) -> pd.Series:
-    high = df["high"]
-    low = df["low"]
-    close = df["close"]
-    prev_close = close.shift(1)
-    tr = np.maximum.reduce([
-        (high - low).values,
-        (high - prev_close).abs().values,
-        (low - prev_close).abs().values
-    ])
-    tr = pd.Series(tr, index=df.index)
-    return tr.rolling(length).mean()
+def detect_bullish_engulfing(df):
+    """Simple bullish engulfing detection on last 2 candles"""
+    if len(df) < 2:
+        return False
+    prev, last = df.iloc[-2], df.iloc[-1]
+    return last['close'] > last['open'] and prev['close'] < prev['open'] and last['close'] > prev['open'] and last['open'] < prev['close']
 
-def stochastic_oscillator(df: pd.DataFrame, k=14, d=3, smooth=3):
-    low_min = df["low"].rolling(window=k).min()
-    high_max = df["high"].rolling(window=k).max()
-    k_raw = (df["close"] - low_min) / (high_max - low_min + 1e-9) * 100.0
-    k_smooth = k_raw.rolling(window=smooth).mean()
-    d_line = k_smooth.rolling(window=d).mean()
-    return k_smooth, d_line
+def detect_bearish_engulfing(df):
+    """Simple bearish engulfing detection on last 2 candles"""
+    if len(df) < 2:
+        return False
+    prev, last = df.iloc[-2], df.iloc[-1]
+    return last['close'] < last['open'] and prev['close'] > prev['open'] and last['open'] > prev['close'] and last['close'] < prev['open']
 
-def fractal_high(df: pd.DataFrame):
-    highs = df["high"]
-    is_fractal = (highs.shift(0) > highs.shift(1)) & (highs.shift(0) > highs.shift(2)) & \
-                 (highs.shift(0) > highs.shift(-1)) & (highs.shift(0) > highs.shift(-2))
-    return is_fractal.fillna(False)
+def analyze_candles(df):
+    """Analyze candles and return signal: 'buy', 'sell', or None"""
+    if len(df) < 30:
+        return None  # Require at least 30 candles for historical bias
 
-def fractal_low(df: pd.DataFrame):
-    lows = df["low"]
-    is_fractal = (lows.shift(0) < lows.shift(1)) & (lows.shift(0) < lows.shift(2)) & \
-                 (lows.shift(0) < lows.shift(-1)) & (lows.shift(0) < lows.shift(-2))
-    return is_fractal.fillna(False)
+    ha_df = heikin_ashi(df)
+    atr = calculate_atr(df)
+    jaw, teeth, lips = alligator_lines(ha_df)
+    k, d = stochastic_oscillator(ha_df)
 
-# ===============================
-# Pocket Option Data Adapter
-# ===============================
+    last_idx = -1
 
-def format_pocket_option_candles(candles: list) -> pd.DataFrame:
-    df = pd.DataFrame(candles)
-    df["time"] = pd.to_datetime(df["time"], unit="s")
-    df.set_index("time", inplace=True)
-    df = df[["open", "high", "low", "close"]]
-    return df
+    # Historical bias: last 30 candles
+    recent = ha_df.iloc[-30:]
+    bullish_bias = recent['close'].mean() > recent['open'].mean()
+    bearish_bias = recent['close'].mean() < recent['open'].mean()
 
-# ===============================
-# Indicator Preparation
-# ===============================
+    # Price action patterns
+    bullish_pattern = detect_bullish_engulfing(recent)
+    bearish_pattern = detect_bearish_engulfing(recent)
 
-def prepare_indicators(df: pd.DataFrame):
-    df = df.copy()
-    df["ema150"] = ema(df["close"], 150)
-    df["atr14"] = atr(df, 14)
-    df["atr_median50"] = df["atr14"].rolling(50).median()
-    df["%K"], df["%D"] = stochastic_oscillator(df, 14, 3, 3)
-    df["fr_high"] = fractal_high(df)
-    df["fr_low"] = fractal_low(df)
-    df["jaw"], df["teeth"], df["lips"] = alligator(df, jaw=15, teeth=8, lips=5)
-    return df
+    # Current momentum & indicator conditions
+    is_buy = (
+        ha_df['close'].iloc[last_idx] > jaw.iloc[last_idx] and
+        ha_df['close'].iloc[last_idx] > teeth.iloc[last_idx] and
+        ha_df['close'].iloc[last_idx] > lips.iloc[last_idx] and
+        k.iloc[last_idx] > d.iloc[last_idx] and
+        k.iloc[last_idx] < 30 and
+        bullish_bias and
+        bullish_pattern and
+        atr.iloc[last_idx] > 0  # optional threshold can be added
+    )
 
-# ===============================
-# Example Strategies
-# ===============================
+    is_sell = (
+        ha_df['close'].iloc[last_idx] < jaw.iloc[last_idx] and
+        ha_df['close'].iloc[last_idx] < teeth.iloc[last_idx] and
+        ha_df['close'].iloc[last_idx] < lips.iloc[last_idx] and
+        k.iloc[last_idx] < d.iloc[last_idx] and
+        k.iloc[last_idx] > 80 and
+        bearish_bias and
+        bearish_pattern and
+        atr.iloc[last_idx] > 0
+    )
 
-def evaluate_trend_reversal(df: pd.DataFrame):
-    last = df.iloc[-1]
-    if last["%K"] < 20 and last["%D"] < 20:
-        return "CALL"
-    elif last["%K"] > 80 and last["%D"] > 80:
-        return "PUT"
-    return None
-
-def evaluate_trend_following(df: pd.DataFrame):
-    last = df.iloc[-1]
-    if last["close"] > last["ema150"]:
-        return "CALL"
-    elif last["close"] < last["ema150"]:
-        return "PUT"
-    return None
-
-# ===============================
-# Unified Signal Generator
-# ===============================
-
-def generate_signals(df: pd.DataFrame, symbol: str, timeframe: str):
-    """
-    Unified entry point for app.py.
-    Uses trend-following for 1m/2m/3m and trend-reversal for 5m.
-    """
-    if len(df) < 200:
-        return "No Signal (insufficient data)"
-
-    df = prepare_indicators(df)
-
-    if timeframe in ["1m", "2m", "3m"]:
-        signal = evaluate_trend_following(df)
-    elif timeframe == "5m":
-        signal = evaluate_trend_reversal(df)
+    if is_buy:
+        return "buy"
+    elif is_sell:
+        return "sell"
     else:
-        signal = None
-
-    if signal:
-        return f"{signal} | {symbol} | {timeframe}"
-    return "No Signal"
+        return None
