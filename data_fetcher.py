@@ -41,17 +41,31 @@ class PocketOptionFetcher:
 
         def on_message(ws, message):
             try:
-                data = json.loads(message)
-            except (json.JSONDecodeError, TypeError):
-                print("[PocketOptionFetcher] Received invalid JSON, ignoring")
-                return
+                if not message:  # Empty or None
+                    print("[PocketOptionFetcher] Empty message received, skipping")
+                    return
 
-            # Store candle data safely
-            candles = data.get("candles")
-            symbol = data.get("symbol")
-            timeframe = data.get("timeframe")
-            if candles and symbol in self.symbols and timeframe in self.timeframes:
-                self.candles_data[symbol][timeframe] = candles
+                data = json.loads(message)
+
+                if not isinstance(data, dict):  # Ensure parsed JSON is a dict
+                    print(f"[PocketOptionFetcher] Unexpected data format: {data}")
+                    return
+
+                # Store candle data safely
+                candles = data.get("candles")
+                symbol = data.get("symbol")
+                timeframe = data.get("timeframe")
+
+                if candles and symbol in self.symbols and timeframe in self.timeframes:
+                    self.candles_data[symbol][timeframe] = candles
+                else:
+                    # Debug log for unrecognized messages
+                    print(f"[PocketOptionFetcher] Ignored message: {data}")
+
+            except (json.JSONDecodeError, TypeError) as e:
+                print(f"[PocketOptionFetcher] JSON parse error: {e}, message: {message}")
+            except Exception as e:
+                print(f"[PocketOptionFetcher] Unexpected error in on_message: {e}")
 
         def on_error(ws, error):
             print(f"[PocketOptionFetcher] WebSocket error: {error}")
