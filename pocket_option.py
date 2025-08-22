@@ -23,7 +23,7 @@ class PocketOptionWS:
         self.keep_running = False
 
         # Pocket Option WebSocket endpoint (replace if different for OTC/live data)
-        self.url = "wss://ws.pocketoption.com/echo"
+        self.url = wss://chat-po.site/cabinet-client/socket.io/?EIO=4&transport=websocket
 
     def _on_open(self, ws):
         print("✅ Connected to Pocket Option WebSocket")
