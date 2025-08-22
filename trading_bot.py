@@ -1,162 +1,111 @@
+# trading_bot.py
 import asyncio
 import json
-import websockets
 import pandas as pd
-import numpy as np
+import websockets
 from datetime import datetime, timedelta
-import telegram
-from credentials import (
-    POCKET_SESSION_TOKEN,
-    POCKET_USER_ID,
-    POCKET_ACCOUNT_URL,
-    TELEGRAM_BOT_TOKEN,
-    TELEGRAM_CHAT_ID
-)
+from strategy import analyze_candles
+from credentials import POCKET_SESSION_TOKEN, POCKET_USER_ID, POCKET_ACCOUNT_URL, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+import requests
 
-# Telegram bot setup
-bot = telegram.Bot(token=TELEGRAM_BOT_TOKEN)
+POCKET_WS_URL = "wss://ws.pocketoption.com/echo"
 
-# WebSocket URL
-POCKET_WS_URL = "wss://ws.pocketoption.com/socket.io/?EIO=3&transport=websocket"
+# Timeframes in seconds
+TIMEFRAMES = {
+    "1m": 60,
+    "2m": 120,
+    "3m": 180,
+    "5m": 300
+}
 
-# Settings
-TIMEFRAMES = [60, 120, 180, 300]  # 1m, 2m, 3m, 5m in seconds
-CANDLE_HISTORY = 50               # Number of candles to analyze
-ATR_PERIOD = 14                   # ATR period for volatility filter
-VOLATILITY_THRESHOLD = 0.0005     # Min ATR to consider valid signal
+# Data storage for candles
+candles_data = {tf: {} for tf in TIMEFRAMES}  # symbol -> dataframe
 
-# In-memory candle storage
-candles_data = {}  # {symbol: {timeframe: [candles]}}
-
-
-def compute_ema(series, period):
-    return series.ewm(span=period, adjust=False).mean()
-
-
-def compute_atr(df, period=14):
-    high = df['high']
-    low = df['low']
-    close = df['close']
-    tr = pd.concat([
-        high - low,
-        (high - close.shift()).abs(),
-        (low - close.shift()).abs()
-    ], axis=1).max(axis=1)
-    atr = tr.rolling(period).mean()
-    return atr
-
-
-def detect_candlestick_patterns(df):
-    patterns = []
-    for i in range(1, len(df)):
-        open_ = df['open'].iloc[i]
-        close = df['close'].iloc[i]
-        prev_open = df['open'].iloc[i - 1]
-        prev_close = df['close'].iloc[i - 1]
-        # Bullish engulfing
-        if close > open_ and prev_close < prev_open and close > prev_open and open_ < prev_close:
-            patterns.append('bullish_engulfing')
-        # Bearish engulfing
-        elif close < open_ and prev_close > prev_open and close < prev_open and open_ > prev_close:
-            patterns.append('bearish_engulfing')
-        else:
-            patterns.append(None)
-    patterns.insert(0, None)
-    df['pattern'] = patterns
-    return df
-
-
-def analyze_candles(df):
-    if len(df) < CANDLE_HISTORY:
-        return None
-    df = detect_candlestick_patterns(df)
-    df['ema150'] = compute_ema(df['close'], 150)
-    atr = compute_atr(df, ATR_PERIOD).iloc[-1]
-    if atr < VOLATILITY_THRESHOLD:
-        return None  # Skip low volatility
-    last_candle = df.iloc[-1]
-    signal = None
-    if last_candle['close'] > last_candle['ema150']:
-        if last_candle['pattern'] == 'bullish_engulfing':
-            signal = 'BUY'
-    elif last_candle['close'] < last_candle['ema150']:
-        if last_candle['pattern'] == 'bearish_engulfing':
-            signal = 'SELL'
-    return signal
-
-
-async def send_telegram_alert(symbol, signal, timeframe):
-    msg = f"Signal: {signal}\nSymbol: {symbol}\nTimeframe: {timeframe // 60}min\nTime: {datetime.utcnow()}"
-    await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=msg)
-
+# Telegram alert function
+def send_telegram_alert(symbol, signal, timeframe):
+    message = f"📈 Signal: {signal.upper()} | {symbol} | Timeframe: {timeframe} | Time: {datetime.utcnow()}"
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "text": message})
+    print("[TELEGRAM] Alert sent:", message)
 
 async def subscribe_assets(ws):
+    """Request assets list and subscribe to ticks + candles"""
     await ws.send(json.dumps([42, ["getAssets", {}]]))
+    print("[SEND] Requested assets list")
 
+async def handle_asset_event(ws, payload):
+    for asset in payload:
+        symbol = asset["symbol"]
+        if not asset.get("enabled"):
+            continue
+        for period in TIMEFRAMES.values():
+            msg = [42, ["subscribe", {"type": "candles", "asset": symbol, "period": period}]]
+            await ws.send(json.dumps(msg))
+        tick_msg = [42, ["subscribe", {"type": "ticks", "asset": symbol}]]
+        await ws.send(json.dumps(tick_msg))
+    print(f"[SUBSCRIBE] Subscribed to {len(payload)} assets")
+
+async def process_candle(symbol, timeframe, candle):
+    """Update local candle storage"""
+    if symbol not in candles_data[timeframe]:
+        candles_data[timeframe][symbol] = pd.DataFrame(columns=["open", "high", "low", "close"])
+    df = candles_data[timeframe][symbol]
+    new_row = {"open": candle["o"], "high": candle["h"], "low": candle["l"], "close": candle["c"]}
+    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+    if len(df) > 50:
+        df = df.iloc[-50:]  # keep last 50 candles
+    candles_data[timeframe][symbol] = df
+
+    # Analyze for signal
+    signal = analyze_candles(df)
+    if signal:
+        send_telegram_alert(symbol, signal, timeframe)
 
 async def handle_message(ws, message):
     if message.startswith("42"):
-        try:
-            data = json.loads(message[2:])
-            event = data[0]
-            payload = data[1] if len(data) > 1 else None
-            if event == "assets":
-                for asset in payload:
-                    if asset.get("enabled"):
-                        symbol = asset['symbol']
-                        candles_data[symbol] = {tf: [] for tf in TIMEFRAMES}
-                        for tf in TIMEFRAMES:
-                            await ws.send(json.dumps([42, ["subscribe", {"type": "candles", "asset": symbol, "period": tf}]]))
-                            await ws.send(json.dumps([42, ["subscribe", {"type": "ticks", "asset": symbol}]]))
-                        print(f"[SUBSCRIBE] {symbol} ✅")
-            elif event == "candles":
-                symbol = payload['asset']
-                timeframe = payload['period']
-                candle = {
-                    'open': payload['open'],
-                    'high': payload['high'],
-                    'low': payload['low'],
-                    'close': payload['close'],
-                    'time': payload['time']
-                }
-                candles_data[symbol][timeframe].append(candle)
-                # Keep last CANDLE_HISTORY
-                if len(candles_data[symbol][timeframe]) > CANDLE_HISTORY:
-                    candles_data[symbol][timeframe] = candles_data[symbol][timeframe][-CANDLE_HISTORY:]
-                df = pd.DataFrame(candles_data[symbol][timeframe])
-                signal = analyze_candles(df)
-                if signal:
-                    # Send alert 30s before next candle
-                    asyncio.create_task(send_telegram_alert(symbol, signal, timeframe))
-        except Exception as e:
-            print("[ERROR parsing]", e)
+        data = json.loads(message[2:])
+        event, payload = data[0], data[1] if len(data) > 1 else None
 
+        if event == "assets":
+            await handle_asset_event(ws, payload)
+        elif event == "candles":
+            symbol = payload["asset"]
+            period = payload["period"]
+            tf = next((k for k,v in TIMEFRAMES.items() if v==period), None)
+            if tf:
+                await process_candle(symbol, tf, payload)
 
 async def connect_pocket():
     while True:
         try:
             async with websockets.connect(POCKET_WS_URL) as ws:
-                # Auth
-                auth_msg = [42, ["auth", {
-                    "sessionToken": POCKET_SESSION_TOKEN,
-                    "uid": POCKET_USER_ID,
-                    "lang": "en",
-                    "currentUrl": POCKET_ACCOUNT_URL,
-                    "isChart": 1
-                }]]
+                # Auth message
+                auth_msg = [
+                    42,
+                    [
+                        "auth",
+                        {
+                            "sessionToken": POCKET_SESSION_TOKEN,
+                            "uid": POCKET_USER_ID,
+                            "lang": "en",
+                            "currentUrl": POCKET_ACCOUNT_URL,
+                            "isChart": 1
+                        },
+                    ],
+                ]
                 await ws.send(json.dumps(auth_msg))
-                print(f"✅ Connected to Pocket Option ({POCKET_ACCOUNT_URL})")
+                print(f"[OPEN] Connected ✅ | {POCKET_ACCOUNT_URL}")
 
                 await subscribe_assets(ws)
 
                 while True:
                     message = await ws.recv()
                     await handle_message(ws, message)
-        except Exception as e:
-            print("❌ Connection error:", e)
-            print("🔄 Reconnecting in 5s...")
-            await asyncio.sleep(5)
 
+        except Exception as e:
+            print("[ERROR] WebSocket error:", e)
+            print("🔄 Reconnecting in 5 seconds...")
+            await asyncio.sleep(5)
 
 if __name__ == "__main__":
     asyncio.run(connect_pocket())
