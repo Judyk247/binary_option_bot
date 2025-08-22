@@ -4,7 +4,7 @@ import time
 import websocket
 from credentials import POCKET_SESSION_TOKEN, POCKET_USER_ID, POCKET_ACCOUNT_URL
 
-POCKET_WS_URL = "wss://ws.pocketoption.com/socket.io/?EIO=3&transport=websocket"
+POCKET_WS_URL = wss://chat-po.site/cabinet-client/socket.io/?EIO=4&transport=websocket
 
 def on_open(ws):
     print("[OPEN] Connected to Pocket Option WebSocket")
