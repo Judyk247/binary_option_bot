@@ -1,14 +1,12 @@
-# pocket_option.py
 """
 Utility module for connecting to Pocket Option WebSocket.
-Handles connection, subscriptions, and incoming price updates.
+Handles connection, subscriptions, incoming price updates, heartbeat, and auto-reconnect.
 """
 
 import json
 import websocket
 import threading
 import time
-
 
 class PocketOptionWS:
     def __init__(self, on_message_callback=None):
@@ -22,60 +20,67 @@ class PocketOptionWS:
         self.on_message_callback = on_message_callback
         self.keep_running = False
 
-        # Pocket Option WebSocket endpoint (replace if different for OTC/live data)
+        # Pocket Option WebSocket endpoint (live/OTC)
         self.url = "wss://chat-po.site/cabinet-client/socket.io/?EIO=4&transport=websocket"
 
     def _on_open(self, ws):
         print("✅ Connected to Pocket Option WebSocket")
+        # Example: request assets list or subscribe to default symbols if needed
+        ws.send('42["getAssets", {}]')
+        print("📡 Requested assets list")
 
-        # Example subscription (replace with actual Pocket Option subscription format)
-        subscribe_msg = {
-            "method": "subscribe",
-            "params": {
-                "symbol": "EURUSD_otc",  # Example symbol
-                "interval": "M1"        # Example timeframe
-            }
-        }
-        ws.send(json.dumps(subscribe_msg))
-        print("📡 Subscribed to EURUSD_otc M1")
+        # Start heartbeat in background
+        threading.Thread(target=self._heartbeat, args=(ws,), daemon=True).start()
 
     def _on_message(self, ws, message):
-        try:
-            data = json.loads(message)
-            # Debug: print incoming data
-            # print("📩 Raw data:", data)
+        if message.startswith("42"):
+            try:
+                data = json.loads(message[2:])
+                event = data[0]
+                payload = data[1] if len(data) > 1 else None
 
-            # If there's a callback, forward price data
-            if self.on_message_callback:
-                self.on_message_callback(data)
+                # Forward to callback
+                if self.on_message_callback:
+                    self.on_message_callback(event, payload)
 
-        except Exception as e:
-            print(f"⚠️ Error parsing message: {e}")
+            except Exception as e:
+                print(f"⚠️ Error parsing message: {e}")
 
     def _on_error(self, ws, error):
         print(f"❌ WebSocket error: {error}")
 
     def _on_close(self, ws, close_status_code, close_msg):
-        print("🔌 WebSocket closed")
+        print("🔌 WebSocket closed:", close_status_code, close_msg)
+
+    def _heartbeat(self, ws):
+        """Send ping every 5 seconds to keep the connection alive"""
+        while self.keep_running:
+            try:
+                ws.send("2")  # Socket.IO ping
+            except Exception as e:
+                print(f"⚠️ Heartbeat error: {e}")
+            time.sleep(5)
 
     def start(self):
-        """Start WebSocket connection in a separate thread."""
+        """Start WebSocket connection in a separate thread with auto-reconnect."""
         self.keep_running = True
-        self.ws = websocket.WebSocketApp(
-            self.url,
-            on_open=self._on_open,
-            on_message=self._on_message,
-            on_error=self._on_error,
-            on_close=self._on_close,
-        )
 
         def run():
             while self.keep_running:
                 try:
+                    self.ws = websocket.WebSocketApp(
+                        self.url,
+                        on_open=self._on_open,
+                        on_message=self._on_message,
+                        on_error=self._on_error,
+                        on_close=self._on_close,
+                        header=["Origin: https://m.pocketoption.com"]  # Important for live connection
+                    )
                     self.ws.run_forever()
                 except Exception as e:
                     print(f"⚠️ Connection error: {e}")
-                    time.sleep(5)  # retry after delay
+                print("⏳ Reconnecting in 5 seconds...")
+                time.sleep(5)
 
         self.thread = threading.Thread(target=run, daemon=True)
         self.thread.start()
@@ -92,8 +97,8 @@ class PocketOptionWS:
 
 # Quick test if run standalone
 if __name__ == "__main__":
-    def handle_data(msg):
-        print("📊 Incoming data:", msg)
+    def handle_data(event, payload):
+        print("📊 Incoming event:", event, "Payload:", payload)
 
     po = PocketOptionWS(on_message_callback=handle_data)
     po.start()
