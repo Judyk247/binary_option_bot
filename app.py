@@ -6,6 +6,7 @@ from flask_cors import CORS
 from flask_socketio import SocketIO
 from strategy import analyze_candles
 from telegram_utils import send_telegram_message
+from data_fetcher import fetch_and_emit_data
 from config import SYMBOLS, TIMEFRAMES, TELEGRAM_CHAT_IDS
 
 # Flask app setup
