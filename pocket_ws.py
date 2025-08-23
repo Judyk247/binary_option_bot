@@ -61,7 +61,8 @@ def run_ws():
                 on_open=on_open,
                 on_message=on_message,
                 on_close=on_close,
-                on_error=on_error
+                on_error=on_error,
+                header=["Origin: https://m.pocketoption.com"]  # Added Origin header
             )
             ws.run_forever()
         except Exception as e:
