@@ -37,7 +37,7 @@ class PocketOptionClient:
 
     def connect(self):
         """Connect to Pocket Option WebSocket server."""
-        ws_url = wss://chat-po.site/cabinet-client/socket.io/?EIO=4&transport=websocket
+        ws_url = "wss://chat-po.site/cabinet-client/socket.io/?EIO=4&transport=websocket"
         self.ws = websocket.WebSocketApp(
             ws_url,
             on_message=self._on_message,
