@@ -5,7 +5,7 @@ from flask import Flask, render_template
 from flask_cors import CORS
 from flask_socketio import SocketIO
 from data_fetcher import PocketOptionFetcher
-from strategy import generate_signals
+from strategy import analyze_candles
 from telegram_utils import send_telegram_message
 from config import SYMBOLS, TIMEFRAMES, TELEGRAM_CHAT_IDS
 
