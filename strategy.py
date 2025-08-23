@@ -12,6 +12,22 @@ def heikin_ashi(df):
     ha_df['low'] = ha_df[['open', 'close', 'low']].min(axis=1)
     return ha_df
 
+def calculate_ema(prices, period):
+    """
+    prices: list of floats
+    period: int, number of candles
+    returns: list of EMA values
+    """
+    emas = []
+    k = 2 / (period + 1)
+    for i, price in enumerate(prices):
+        if i == 0:
+            emas.append(price)
+        else:
+            ema = price * k + emas[-1] * (1 - k)
+            emas.append(ema)
+    return emas
+
 def calculate_atr(df, period=14):
     """Average True Range for volatility filter."""
     high_low = df['high'] - df['low']
