@@ -1,10 +1,14 @@
+# data_fetcher.py
 import json
 import time
 import websocket
+import threading
 from collections import defaultdict
 from credentials import POCKET_SESSION_TOKEN, POCKET_USER_ID, POCKET_ACCOUNT_URL
 from strategy import analyze_candles  # Your EMA/Stochastic/Alligator logic
 from telegram_utils import send_telegram_message  # Your Telegram alert function
+from config import TELEGRAM_CHAT_IDS
+import pandas as pd
 
 # Store incoming data for all assets and timeframes
 market_data = defaultdict(lambda: {"ticks": [], "candles": defaultdict(list)})
@@ -72,7 +76,8 @@ def on_message(ws, message):
                 market_data[asset]["candles"][period].append(candle)
 
                 # Analyze strategy
-                signal = analyze_candles(asset, period, market_data)
+                df = pd.DataFrame(market_data[asset]["candles"][period])
+                signal = analyze_candles(df)
                 if signal:  # If strategy returns a signal
                     send_telegram_message(asset, signal, period)
 
@@ -98,7 +103,6 @@ def run_ws():
             )
 
             # Start heartbeat in background
-            import threading
             threading.Thread(target=send_heartbeat, args=(ws,), daemon=True).start()
 
             ws.run_forever()
@@ -110,6 +114,36 @@ def run_ws():
 def get_market_data():
     """Return the latest market data snapshot"""
     return market_data
+
+# --- New function for Flask dashboard ---
+def start_fetching(symbols, timeframes, socketio):
+    """
+    Continuously fetch Pocket Option candles for symbols & timeframes,
+    analyze signals, and emit to dashboard via socketio.
+    """
+    while True:
+        for symbol in symbols:
+            for tf in timeframes:
+                candles = market_data[symbol]["candles"].get(tf_to_seconds(tf), [])
+                if not candles:
+                    continue
+                df = pd.DataFrame(candles)
+                signal = analyze_candles(df)
+                # Emit live signal to dashboard
+                socketio.emit("new_signal", {"symbol": symbol, "timeframe": tf, "signal": signal}, broadcast=True)
+                # Send Telegram alert
+                if signal:
+                    for chat_id in TELEGRAM_CHAT_IDS:
+                        if chat_id:
+                            try:
+                                send_telegram_message(chat_id, f"{symbol} {tf} signal: {signal}")
+                            except Exception as e:
+                                print("[TELEGRAM ERROR]", e)
+        time.sleep(30)
+
+def tf_to_seconds(tf):
+    """Convert string timeframe (1m, 2m, 3m, 5m) to seconds"""
+    return int(tf[:-1]) * 60
 
 if __name__ == "__main__":
     run_ws()
