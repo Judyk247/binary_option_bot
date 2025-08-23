@@ -2,16 +2,6 @@
 import numpy as np
 import pandas as pd
 
-def heikin_ashi(df):
-    """Convert standard OHLC to Heikin Ashi candles."""
-    ha_df = df.copy()
-    ha_df['close'] = (df['open'] + df['high'] + df['low'] + df['close']) / 4
-    ha_df['open'] = (df['open'].shift(1) + df['close'].shift(1)) / 2
-    ha_df.iloc[0, ha_df.columns.get_loc('open')] = df['open'].iloc[0]
-    ha_df['high'] = ha_df[['open', 'close', 'high']].max(axis=1)
-    ha_df['low'] = ha_df[['open', 'close', 'low']].min(axis=1)
-    return ha_df
-
 def calculate_ema(prices, period):
     """
     prices: list of floats
@@ -27,6 +17,17 @@ def calculate_ema(prices, period):
             ema = price * k + emas[-1] * (1 - k)
             emas.append(ema)
     return emas
+    
+def heikin_ashi(df):
+    """Convert standard OHLC to Heikin Ashi candles."""
+    ha_df = df.copy()
+    ha_df['close'] = (df['open'] + df['high'] + df['low'] + df['close']) / 4
+    ha_df['open'] = (df['open'].shift(1) + df['close'].shift(1)) / 2
+    ha_df.iloc[0, ha_df.columns.get_loc('open')] = df['open'].iloc[0]
+    ha_df['high'] = ha_df[['open', 'close', 'high']].max(axis=1)
+    ha_df['low'] = ha_df[['open', 'close', 'low']].min(axis=1)
+    return ha_df
+
 
 def calculate_atr(df, period=14):
     """Average True Range for volatility filter."""
@@ -37,7 +38,7 @@ def calculate_atr(df, period=14):
     atr = tr.rolling(period).mean()
     return atr
 
-def alligator_lines(df, jaw=13, teeth=8, lips=5):
+def calculate_alligator(df, jaw=13, teeth=8, lips=5):
     """Calculate Alligator lines using SMAs of median price."""
     median_price = (df['high'] + df['low']) / 2
     jaw_line = median_price.rolling(jaw).mean()
