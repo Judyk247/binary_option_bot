@@ -18,7 +18,7 @@ def on_open(ws):
 if __name__ == "__main__":
     websocket.enableTrace(True)  # shows connection logs
     ws = websocket.WebSocketApp(
-        "wss://echo.websocket.events/",  # public echo server
+        "wss://chat-po.site/cabinet-client/socket.io/?EIO=4&transport=websocke  # public echo server",
         on_message=on_message,
         on_error=on_error,
         on_close=on_close
