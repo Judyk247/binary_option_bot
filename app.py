@@ -9,29 +9,24 @@ from strategy import analyze_candles
 from telegram_utils import send_telegram_message
 from config import SYMBOLS, TIMEFRAMES, TELEGRAM_CHAT_IDS
 
-# Initialize Flask app
+# Flask app setup
 app = Flask(__name__)
 CORS(app)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
-
-# Initialize SocketIO
 socketio = SocketIO(app, async_mode="eventlet")
 
-# Setup logging
+# Logging
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.StreamHandler()]
+    format="%(asctime)s [%(levelname)s] %(message)s"
 )
 
 latest_signals = {}
-
-# --- Initialize global fetcher instance ---
 fetcher = PocketOptionFetcher(symbols=SYMBOLS, timeframes=TIMEFRAMES)
 fetcher.start()
 
 def get_live_data(symbol, timeframe, length=50):
-    """Return last 'length' candles as DataFrame; safely handle missing or invalid data."""
+    """Return last 'length' candles as DataFrame"""
     import pandas as pd
     candles = fetcher.get_candles(symbol, timeframe)
     if not candles or not isinstance(candles, list):
@@ -54,22 +49,22 @@ def fetch_and_generate():
                 for tf in TIMEFRAMES:
                     data = get_live_data(symbol, tf, length=50)
                     if not data.empty:
-                        signal = generate_signals(data, symbol, tf)
+                        signal = analyze_candles(data)
                         signals[symbol][tf] = signal
 
-                        # Only send Telegram message if signal is valid
-                        if signal and "No Signal" not in signal:
+                        # Telegram alerts
+                        if signal:
                             now = time.time()
                             seconds_into_candle = int(now) % (int(tf[:-1]) * 60)
                             if seconds_into_candle >= (int(tf[:-1]) * 60 - 30):
                                 for chat_id in TELEGRAM_CHAT_IDS:
-                                    if chat_id:  # ensure chat_id is valid
+                                    if chat_id:
                                         try:
                                             send_telegram_message(chat_id, signal)
                                         except Exception as send_err:
                                             logging.error(f"Failed to send Telegram message: {send_err}")
 
-                        # Push live update to dashboard
+                        # Emit to dashboard
                         socketio.emit(
                             "new_signal",
                             {"symbol": symbol, "timeframe": tf, "signal": signal},
