@@ -72,9 +72,9 @@ def on_message(ws, message):
                 market_data[asset]["candles"][period].append(candle)
 
                 # Analyze strategy
-                signal = analyze_candle_signal(asset, period, market_data)
+                signal = analyze_candles(asset, period, market_data)
                 if signal:  # If strategy returns a signal
-                    send_signal_telegram(asset, signal, period)
+                    send_telegram_message(asset, signal, period)
 
         except Exception as e:
             print("[ERROR parsing message]", e)
