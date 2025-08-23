@@ -4,7 +4,7 @@ import websocket
 from collections import defaultdict
 from credentials import POCKET_SESSION_TOKEN, POCKET_USER_ID, POCKET_ACCOUNT_URL
 from strategy import analyze_candles  # Your EMA/Stochastic/Alligator logic
-from telegram_utils import send_signal_telegram  # Your Telegram alert function
+from telegram_utils import send_telegram_message  # Your Telegram alert function
 
 # Store incoming data for all assets and timeframes
 market_data = defaultdict(lambda: {"ticks": [], "candles": defaultdict(list)})
