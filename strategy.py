@@ -77,6 +77,8 @@ def analyze_candles(df):
     atr = calculate_atr(df)
     jaw, teeth, lips = alligator_lines(ha_df)
     k, d = stochastic_oscillator(ha_df)
+    ema = ha_df['close'].ewm(span=150, adjust=False).mean()
+    
 
     last_idx = -1
 
