@@ -49,6 +49,7 @@ def on_message(ws, message):
             if event == "assets":
                 print("[RECV] Assets list received ✅")
                 assets = [a["symbol"] for a in payload if a.get("enabled")]
+                print(f"[DEBUG] Assets enabled: {assets[:5]} ... ({len(assets)} total)")
 
                 # Subscribe to ticks and candles
                 for asset in assets:
@@ -61,6 +62,7 @@ def on_message(ws, message):
                 asset = payload["asset"]
                 tick = {"time": payload["time"], "price": payload["price"]}
                 market_data[asset]["ticks"].append(tick)
+                print(f"[TICK] {asset}: {tick}")
 
             elif event == "candles" and payload:
                 asset = payload["asset"]
@@ -74,12 +76,17 @@ def on_message(ws, message):
                     "volume": payload["volume"],
                 }
                 market_data[asset]["candles"][period].append(candle)
+                print(f"[CANDLE] {asset} {period}s: close={candle['close']}")
 
                 # Analyze strategy
                 df = pd.DataFrame(market_data[asset]["candles"][period])
+                print(f"[DEBUG] Running strategy for {asset} {period}s (candles={len(df)})")
                 signal = analyze_candles(df)
-                if signal:  # If strategy returns a signal
+                if signal:
+                    print(f"[SIGNAL] {asset} {period}s → {signal}")
                     send_telegram_message(asset, signal, period)
+                else:
+                    print(f"[NO SIGNAL] {asset} {period}s")
 
         except Exception as e:
             print("[ERROR parsing message]", e)
@@ -128,17 +135,19 @@ def start_fetching(symbols, timeframes, socketio):
                 if not candles:
                     continue
                 df = pd.DataFrame(candles)
+                print(f"[DEBUG] Dashboard check {symbol} {tf} (candles={len(df)})")
                 signal = analyze_candles(df)
-                # Emit live signal to dashboard
                 socketio.emit("new_signal", {"symbol": symbol, "timeframe": tf, "signal": signal}, broadcast=True)
-                # Send Telegram alert
                 if signal:
+                    print(f"[SIGNAL→DASHBOARD] {symbol} {tf}: {signal}")
                     for chat_id in TELEGRAM_CHAT_IDS:
                         if chat_id:
                             try:
                                 send_telegram_message(chat_id, f"{symbol} {tf} signal: {signal}")
                             except Exception as e:
                                 print("[TELEGRAM ERROR]", e)
+                else:
+                    print(f"[NO SIGNAL→DASHBOARD] {symbol} {tf}")
         time.sleep(30)
 
 def tf_to_seconds(tf):
