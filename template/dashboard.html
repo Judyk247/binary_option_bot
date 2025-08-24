@@ -10,8 +10,8 @@
         th, td { border: 1px solid #ccc; padding: 10px; text-align: center; }
         th { background-color: #333; color: #fff; }
         tr:nth-child(even) { background-color: #eee; }
-        .approve-btn { background-color: #28a745; color: #fff; padding: 5px 10px; border: none; cursor: pointer; }
-        .approve-btn:hover { background-color: #218838; }
+        .signal-buy { color: green; font-weight: bold; }
+        .signal-sell { color: red; font-weight: bold; }
         h2 { color: #333; }
     </style>
 </head>
@@ -19,52 +19,29 @@
     <h1>Trading Bot Dashboard</h1>
     <p>Last update: {{ now.strftime("%Y-%m-%d %H:%M:%S") }} UTC</p>
 
-    <h2>Live Candle Data</h2>
-    <table>
-        <tr>
-            <th>Symbol</th>
-            <th>Timeframe</th>
-            <th>Open</th>
-            <th>Close</th>
-            <th>Action</th>
-        </tr>
-        {% for candle in candles %}
-        <tr>
-            <td>{{ candle.symbol }}</td>
-            <td>{{ candle.timeframe }} min</td>
-            <td>{{ candle.last_open }}</td>
-            <td>{{ candle.last_close }}</td>
-            <td>
-                <form action="{{ url_for('approve_signal') }}" method="post">
-                    <input type="hidden" name="symbol" value="{{ candle.symbol }}">
-                    <input type="hidden" name="timeframe" value="{{ candle.timeframe }}">
-                    <select name="signal">
-                        <option value="Buy">Buy</option>
-                        <option value="Sell">Sell</option>
-                    </select>
-                    <button type="submit" class="approve-btn">Approve</button>
-                </form>
-            </td>
-        </tr>
-        {% endfor %}
-    </table>
-
-    <h2>Approved Signals</h2>
+    <h2>Latest Signals</h2>
     <table>
         <tr>
             <th>Symbol</th>
             <th>Timeframe</th>
             <th>Signal</th>
-            <th>Time Approved (UTC)</th>
         </tr>
-        {% for signal in approved %}
-        <tr>
-            <td>{{ signal.symbol }}</td>
-            <td>{{ signal.timeframe }} min</td>
-            <td>{{ signal.signal }}</td>
-            <td>{{ signal.time.strftime("%Y-%m-%d %H:%M:%S") }}</td>
-        </tr>
-        {% endfor %}
+        {% if signals %}
+            {% for key, signal in signals.items() %}
+                {% set parts = key.split("_") %}
+                <tr>
+                    <td>{{ parts[0] }}</td>
+                    <td>{{ parts[1] }}</td>
+                    <td class="{% if signal == 'Buy' %}signal-buy{% elif signal == 'Sell' %}signal-sell{% endif %}">
+                        {{ signal }}
+                    </td>
+                </tr>
+            {% endfor %}
+        {% else %}
+            <tr>
+                <td colspan="3">No signals yet...</td>
+            </tr>
+        {% endif %}
     </table>
 </body>
-                </html>
+</html>
