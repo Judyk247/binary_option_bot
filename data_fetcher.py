@@ -123,36 +123,61 @@ def get_market_data():
     return market_data
 
 # --- New function for Flask dashboard ---
+# --- Updated start_fetching ---
 def start_fetching(symbols, timeframes, socketio, latest_signals):
     """
     Continuously fetch Pocket Option candles for symbols & timeframes,
     analyze signals, and emit to dashboard via socketio.
     """
+    import logging
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+    logging.info("Started start_fetching thread for dashboard & Telegram alerts.")
+
     while True:
         for symbol in symbols:
             for tf in timeframes:
-                candles = market_data[symbol]["candles"].get(tf_to_seconds(tf), [])
-                if not candles:
-                    continue
-                df = pd.DataFrame(candles)
-                print(f"[DEBUG] Dashboard check {symbol} {tf} (candles={len(df)})")
-                signal = analyze_candles(df)
-                # ✅ Update the dashboard state
-                latest_signals[f"{symbol}_{tf}"] = signal  
+                try:
+                    candles = market_data[symbol]["candles"].get(tf_to_seconds(tf), [])
+                    if not candles:
+                        continue
 
-                # ✅ Emit live update to frontend
-                socketio.emit("new_signal", {"symbol": symbol, "timeframe": tf, "signal": signal}, broadcast=True)
-                if signal:
-                    print(f"[SIGNAL→DASHBOARD] {symbol} {tf}: {signal}")
-                    for chat_id in TELEGRAM_CHAT_IDS:
-                        if chat_id:
-                            try:
-                                send_telegram_message(chat_id, f"{symbol} {tf} signal: {signal}")
-                            except Exception as e:
-                                print("[TELEGRAM ERROR]", e)
-                else:
-                    print(f"[NO SIGNAL→DASHBOARD] {symbol} {tf}")
-        time.sleep(30)
+                    df = pd.DataFrame(candles)
+                    signal = analyze_candles(df)  # "Buy", "Sell", or None
+
+                    if signal:
+                        # Prepare signal data
+                        signal_data = {
+                            "symbol": symbol,
+                            "signal": signal,
+                            "timeframe": tf,
+                            "time": datetime.utcnow().strftime("%H:%M:%S")
+                        }
+
+                        # Append to latest_signals list
+                        latest_signals.append(signal_data)
+                        # Keep only last 50 signals
+                        if len(latest_signals) > 50:
+                            latest_signals.pop(0)
+
+                        # Emit to dashboard
+                        socketio.emit("update_signal", signal_data)
+
+                        # Send Telegram alert
+                        for chat_id in TELEGRAM_CHAT_IDS:
+                            if chat_id:
+                                try:
+                                    send_telegram_message(chat_id, f"{symbol} {tf} signal: {signal}")
+                                except Exception as e:
+                                    logging.error(f"[TELEGRAM ERROR] {e}")
+
+                        logging.info(f"[SIGNAL] {symbol} {tf}: {signal}")
+                    else:
+                        logging.debug(f"[NO SIGNAL] {symbol} {tf}")
+
+                except Exception as e:
+                    logging.error(f"[ERROR processing {symbol} {tf}] {e}")
+
+        time.sleep(5)  # Wait before next scan of all symbols/timeframes
 
 def tf_to_seconds(tf):
     """Convert string timeframe (1m, 2m, 3m, 5m) to seconds"""
