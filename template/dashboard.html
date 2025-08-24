@@ -31,6 +31,7 @@
                 <th>Symbol</th>
                 <th>Signal</th>
                 <th>Time (UTC)</th>
+                <th>Timeframe</th>
             </tr>
         </thead>
         <tbody>
@@ -39,6 +40,7 @@
                 <td>{{ sig.symbol }}</td>
                 <td>{{ sig.signal }}</td>
                 <td>{{ sig.time }}</td>
+                <td>{{ sig.timeframe }}</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -56,13 +58,20 @@
             const cellSymbol = row.insertCell(0);
             const cellSignal = row.insertCell(1);
             const cellTime = row.insertCell(2);
+            const cellTimeframe = row.insertCell(3);
 
             cellSymbol.innerText = data.symbol;
             cellSignal.innerText = data.signal;
             cellTime.innerText = data.time;
+            cellTimeframe.innerText = data.timeframe;
 
             // Update last update timestamp
             document.getElementById('last-update').innerText = new Date().toISOString().slice(0,19).replace('T', ' ');
+
+            // Optional: keep only last 50 rows
+            while(table.rows.length > 50){
+                table.deleteRow(0);
+            }
         });
     </script>
 </body>
