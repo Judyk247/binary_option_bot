@@ -37,7 +37,7 @@ def on_open(ws):
     # Authenticate
     auth_msg = f'42["auth",{{"sessionToken":"{POCKET_SESSION_TOKEN}","uid":"{POCKET_USER_ID}","lang":"en","currentUrl":"{POCKET_ACCOUNT_URL}","isChart":1}}]'
     ws.send(auth_msg)
-    print("[SEND] Auth message sent ✅")
+    print("[SEND] Auth message sent ")
 
 def on_message(ws, message):
     if message.startswith("42"):
@@ -47,7 +47,7 @@ def on_message(ws, message):
             payload = data[1] if len(data) > 1 else None
 
             if event == "assets":
-                print("[RECV] Assets list received ✅")
+                print("[RECV] Assets list received ")
                 assets = [a["symbol"] for a in payload if a.get("enabled")]
                 print(f"[DEBUG] Assets enabled: {assets[:5]} ... ({len(assets)} total)")
 
