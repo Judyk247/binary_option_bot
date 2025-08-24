@@ -5,8 +5,8 @@ import websocket
 import threading
 from collections import defaultdict
 from credentials import POCKET_SESSION_TOKEN, POCKET_USER_ID, POCKET_ACCOUNT_URL
-from strategy import analyze_candles  # Your EMA/Stochastic/Alligator logic
-from telegram_utils import send_telegram_message  # Your Telegram alert function
+from strategy import analyze_candles
+from telegram_utils import send_telegram_message
 from config import TELEGRAM_CHAT_IDS
 import pandas as pd
 from datetime import datetime
@@ -56,7 +56,15 @@ def on_message(ws, message):
                 otc_symbols = [a["symbol"] for a in payload if a.get("enabled") and a.get("type")=="currency_pair" and a.get("category")=="OTC"]
                 print(f"[DEBUG] OTC symbols: {otc_symbols[:5]} ... ({len(otc_symbols)} total)")
 
-                # Subscribe to ticks and candles for OTC symbols
+                # Prefill historical candles for each OTC symbol
+                for asset in otc_symbols:
+                    for period in CANDLE_PERIODS:
+                        try:
+                            ws.send(f'42["requestHistoricalCandles",{{"asset":"{asset}","period":{period},"count":50}}]')
+                        except Exception as e:
+                            print(f"[HIST PREFILL ERROR] {asset} {period}: {e}")
+
+                # Subscribe to live ticks and candles for OTC symbols
                 for asset in otc_symbols:
                     ws.send(f'42["subscribe",{{"type":"ticks","asset":"{asset}"}}]')
                     for period in CANDLE_PERIODS:
@@ -117,31 +125,8 @@ def tf_to_seconds(tf):
     """Convert string timeframe (1m, 2m, 3m, 5m) to seconds"""
     return int(tf[:-1]) * 60
 
-# --- Pre-fill historical candles function ---
-def prefill_historical_candles(symbols, timeframes, fetch_historical_fn):
-    """
-    Fetch and pre-fill at least 30 candles per symbol/timeframe using fetch_historical_fn(symbol, period, count).
-    """
-    TIMEFRAME_MAP = {"1m": 60, "2m": 120, "3m": 180, "5m": 300}
-    for symbol in symbols:
-        for tf in timeframes:
-            period_seconds = TIMEFRAME_MAP.get(tf)
-            if not period_seconds:
-                continue
-            try:
-                candles = fetch_historical_fn(symbol, period_seconds, 50)  # Fetch last 50 candles
-                if candles:
-                    market_data[symbol]["candles"][period_seconds] = candles[-50:]
-                    print(f"[PREFILL] {symbol} {tf}: Loaded {len(candles)} historical candles")
-            except Exception as e:
-                print(f"[PREFILL ERROR] {symbol} {tf}: {e}")
-
-# --- Updated start_fetching with dynamic OTC symbols ---
+# --- Updated start_fetching with dynamic OTC symbols and no live candle wait ---
 def start_fetching(timeframes, socketio, latest_signals):
-    """
-    Continuously fetch Pocket Option candles for OTC symbols & timeframes,
-    analyze signals, and emit to dashboard via socketio.
-    """
     import logging
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
     logging.info("Started start_fetching thread for dashboard & Telegram alerts.")
@@ -160,9 +145,9 @@ def start_fetching(timeframes, socketio, latest_signals):
                     candles = market_data[symbol]["candles"].get(period_seconds, [])
                     logging.debug(f"[DEBUG] {symbol} {tf}: {len(candles)} candles available")
 
-                    # Only run analysis if at least 30 candles exist
-                    if len(candles) < 30:
-                        logging.info(f"[WAIT] Not enough candles for {symbol} {tf} ({len(candles)}/30)")
+                    # Remove the 30 live candle wait; signals start immediately if data exists
+                    if not candles:
+                        logging.info(f"[WAIT] No candles yet for {symbol} {tf}")
                         continue
 
                     df = pd.DataFrame(candles)
