@@ -123,7 +123,7 @@ def get_market_data():
     return market_data
 
 # --- New function for Flask dashboard ---
-def start_fetching(symbols, timeframes, socketio latest_signals):
+def start_fetching(symbols, timeframes, socketio, latest_signals):
     """
     Continuously fetch Pocket Option candles for symbols & timeframes,
     analyze signals, and emit to dashboard via socketio.
