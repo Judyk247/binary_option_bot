@@ -50,6 +50,7 @@ def on_message(ws, message):
                 print("[RECV] Assets list received ")
                 assets = [a["symbol"] for a in payload if a.get("enabled")]
                 print(f"[DEBUG] Assets enabled: {assets[:5]} ... ({len(assets)} total)")
+
                 # Subscribe to ticks and candles
                 for asset in assets:
                     ws.send(f'42["subscribe",{{"type":"ticks","asset":"{asset}"}}]')
@@ -76,16 +77,6 @@ def on_message(ws, message):
                 }
                 market_data[asset]["candles"][period].append(candle)
                 print(f"[CANDLE] {asset} {period}s: close={candle['close']}")
-
-                # Analyze strategy
-                df = pd.DataFrame(market_data[asset]["candles"][period])
-                print(f"[DEBUG] Running strategy for {asset} {period}s (candles={len(df)})")
-                signal = analyze_candles(df)
-                if signal:
-                    print(f"[SIGNAL] {asset} {period}s → {signal}")
-                    send_telegram_message(asset, signal, period)
-                else:
-                    print(f"[NO SIGNAL] {asset} {period}s")
 
         except Exception as e:
             print("[ERROR parsing message]", e)
@@ -125,17 +116,31 @@ def tf_to_seconds(tf):
     """Convert string timeframe (1m, 2m, 3m, 5m) to seconds"""
     return int(tf[:-1]) * 60
 
-# --- Updated start_fetching with proper period mapping and full logging ---
+# --- Pre-fill historical candles function ---
+def prefill_historical_candles(symbols, timeframes, fetch_historical_fn):
+    """
+    Fetch and pre-fill at least 30 candles per symbol/timeframe using fetch_historical_fn(symbol, period, count).
+    """
+    TIMEFRAME_MAP = {"1m": 60, "2m": 120, "3m": 180, "5m": 300}
+    for symbol in symbols:
+        for tf in timeframes:
+            period_seconds = TIMEFRAME_MAP.get(tf)
+            if not period_seconds:
+                continue
+            try:
+                candles = fetch_historical_fn(symbol, period_seconds, 50)  # Fetch last 50 candles
+                if candles:
+                    market_data[symbol]["candles"][period_seconds] = candles[-50:]
+                    print(f"[PREFILL] {symbol} {tf}: Loaded {len(candles)} historical candles")
+            except Exception as e:
+                print(f"[PREFILL ERROR] {symbol} {tf}: {e}")
+
+# --- Updated start_fetching with full logging and sanity check ---
 def start_fetching(symbols, timeframes, socketio, latest_signals):
-    """
-    Continuously fetch Pocket Option candles for symbols & timeframes,
-    analyze signals, and emit to dashboard via socketio.
-    """
     import logging
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
     logging.info("Started start_fetching thread for dashboard & Telegram alerts.")
 
-    # Map your dashboard timeframes to Pocket Option periods
     TIMEFRAME_MAP = {"1m": 60, "2m": 120, "3m": 180, "5m": 300}
 
     while True:
@@ -156,7 +161,6 @@ def start_fetching(symbols, timeframes, socketio, latest_signals):
                         continue
 
                     df = pd.DataFrame(candles)
-
                     signal = analyze_candles(df)
                     if not signal:
                         logging.info(f"[NO SIGNAL] {symbol} {tf}")
@@ -169,12 +173,10 @@ def start_fetching(symbols, timeframes, socketio, latest_signals):
                         "time": datetime.utcnow().strftime("%H:%M:%S")
                     }
 
-                    # Append to latest_signals list (keep last 50)
                     latest_signals.append(signal_data)
                     if len(latest_signals) > 50:
                         latest_signals.pop(0)
 
-                    # Emit to dashboard
                     socketio.emit("update_signal", signal_data)
                     logging.info(f"[SIGNAL] Emitted to dashboard: {symbol} {tf} → {signal}")
 
@@ -189,9 +191,8 @@ def start_fetching(symbols, timeframes, socketio, latest_signals):
                 except Exception as e:
                     logging.error(f"[ERROR processing {symbol} {tf}] {e}")
 
-        # Debug log at end of loop
         logging.info(f"Latest signals count: {len(latest_signals)}")
-        time.sleep(1)  # Small sleep to prevent tight loop
+        time.sleep(1)  # Prevent tight loop
 
 if __name__ == "__main__":
     run_ws()
