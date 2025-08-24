@@ -126,7 +126,7 @@ def tf_to_seconds(tf):
     return int(tf[:-1]) * 60
 
 # --- Updated start_fetching with dynamic OTC symbols and no live candle wait ---
-def start_fetching(timeframes, socketio, latest_signals):
+def start_fetching(symbols,timeframes, socketio, latest_signals):
     import logging
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
     logging.info("Started start_fetching thread for dashboard & Telegram alerts.")
