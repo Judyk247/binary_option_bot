@@ -34,7 +34,6 @@ def send_heartbeat(ws):
 
 def on_open(ws):
     print("[OPEN] Connected to Pocket Option WebSocket")
-
     # Authenticate
     auth_msg = f'42["auth",{{"sessionToken":"{POCKET_SESSION_TOKEN}","uid":"{POCKET_USER_ID}","lang":"en","currentUrl":"{POCKET_ACCOUNT_URL}","isChart":1}}]'
     ws.send(auth_msg)
@@ -51,7 +50,6 @@ def on_message(ws, message):
                 print("[RECV] Assets list received ")
                 assets = [a["symbol"] for a in payload if a.get("enabled")]
                 print(f"[DEBUG] Assets enabled: {assets[:5]} ... ({len(assets)} total)")
-
                 # Subscribe to ticks and candles
                 for asset in assets:
                     ws.send(f'42["subscribe",{{"type":"ticks","asset":"{asset}"}}]')
@@ -127,7 +125,7 @@ def tf_to_seconds(tf):
     """Convert string timeframe (1m, 2m, 3m, 5m) to seconds"""
     return int(tf[:-1]) * 60
 
-# --- Updated start_fetching with df fix ---
+# --- Updated start_fetching with dashboard-ready fix ---
 def start_fetching(symbols, timeframes, socketio, latest_signals):
     """
     Continuously fetch Pocket Option candles for symbols & timeframes,
@@ -143,12 +141,17 @@ def start_fetching(symbols, timeframes, socketio, latest_signals):
                 try:
                     period_seconds = tf_to_seconds(tf)
                     candles = market_data[symbol]["candles"].get(period_seconds, [])
-                    df = pd.DataFrame(candles)
+                    if not candles:
+                        continue  # Skip if no candles yet
 
+                    df = pd.DataFrame(candles)
                     signal = analyze_candles(df)
+                    if not signal:
+                        continue  # Skip emitting if no real signal
+
                     signal_data = {
                         "symbol": symbol,
-                        "signal": signal or "None",
+                        "signal": signal,
                         "timeframe": tf,
                         "time": datetime.utcnow().strftime("%H:%M:%S")
                     }
@@ -161,17 +164,14 @@ def start_fetching(symbols, timeframes, socketio, latest_signals):
                     # Emit to dashboard
                     socketio.emit("update_signal", signal_data)
 
-                    # Send Telegram alert only if real signal
-                    if signal:
-                        for chat_id in TELEGRAM_CHAT_IDS:
-                            if chat_id:
-                                try:
-                                    send_telegram_message(chat_id, f"{symbol} {tf} signal: {signal}")
-                                except Exception as e:
-                                    logging.error(f"[TELEGRAM ERROR] {e}")
-                        logging.info(f"[SIGNAL] {symbol} {tf}: {signal}")
-                    else:
-                        logging.info(f"[NO SIGNAL] {symbol} {tf}")
+                    # Send Telegram alert
+                    for chat_id in TELEGRAM_CHAT_IDS:
+                        if chat_id:
+                            try:
+                                send_telegram_message(chat_id, f"{symbol} {tf} signal: {signal}")
+                            except Exception as e:
+                                logging.error(f"[TELEGRAM ERROR] {e}")
+                    logging.info(f"[SIGNAL] {symbol} {tf}: {signal}")
 
                 except Exception as e:
                     logging.error(f"[ERROR processing {symbol} {tf}] {e}")
