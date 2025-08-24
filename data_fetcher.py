@@ -123,8 +123,11 @@ def get_market_data():
     """Return the latest market data snapshot"""
     return market_data
 
-# --- New function for Flask dashboard ---
-# --- Updated start_fetching ---
+def tf_to_seconds(tf):
+    """Convert string timeframe (1m, 2m, 3m, 5m) to seconds"""
+    return int(tf[:-1]) * 60
+
+# --- Updated start_fetching with df fix ---
 def start_fetching(symbols, timeframes, socketio, latest_signals):
     """
     Continuously fetch Pocket Option candles for symbols & timeframes,
@@ -138,6 +141,10 @@ def start_fetching(symbols, timeframes, socketio, latest_signals):
         for symbol in symbols:
             for tf in timeframes:
                 try:
+                    period_seconds = tf_to_seconds(tf)
+                    candles = market_data[symbol]["candles"].get(period_seconds, [])
+                    df = pd.DataFrame(candles)
+
                     signal = analyze_candles(df)
                     signal_data = {
                         "symbol": symbol,
@@ -171,10 +178,6 @@ def start_fetching(symbols, timeframes, socketio, latest_signals):
 
         # Debug log at end of loop
         logging.info(f"Latest signals count: {len(latest_signals)}")
-
-def tf_to_seconds(tf):
-    """Convert string timeframe (1m, 2m, 3m, 5m) to seconds"""
-    return int(tf[:-1]) * 60
 
 if __name__ == "__main__":
     run_ws()
