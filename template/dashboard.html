@@ -1,47 +1,69 @@
-<!-- templates/dashboard.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Trading Bot Dashboard</title>
+    <title>Binary Options Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f7f7f7; }
-        table { border-collapse: collapse; width: 100%; margin-bottom: 30px; }
-        th, td { border: 1px solid #ccc; padding: 10px; text-align: center; }
-        th { background-color: #333; color: #fff; }
-        tr:nth-child(even) { background-color: #eee; }
-        .signal-buy { color: green; font-weight: bold; }
-        .signal-sell { color: red; font-weight: bold; }
-        h2 { color: #333; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+        tr:nth-child(even){background-color: #f2f2f2;}
     </style>
 </head>
 <body>
-    <h1>Trading Bot Dashboard</h1>
-    <p>Last update: {{ now.strftime("%Y-%m-%d %H:%M:%S") }} UTC</p>
-
-    <h2>Latest Signals</h2>
-    <table>
-        <tr>
-            <th>Symbol</th>
-            <th>Timeframe</th>
-            <th>Signal</th>
-        </tr>
-        {% if signals %}
-            {% for key, signal in signals.items() %}
-                {% set parts = key.split("_") %}
-                <tr>
-                    <td>{{ parts[0] }}</td>
-                    <td>{{ parts[1] }}</td>
-                    <td class="{% if signal == 'Buy' %}signal-buy{% elif signal == 'Sell' %}signal-sell{% endif %}">
-                        {{ signal }}
-                    </td>
-                </tr>
-            {% endfor %}
-        {% else %}
+    <h1>Binary Options Dashboard</h1>
+    <p>Last update: <span id="last-update">{{ now.strftime('%Y-%m-%d %H:%M:%S') }}</span> UTC</p>
+    
+    <table id="signals-table">
+        <thead>
             <tr>
-                <td colspan="3">No signals yet...</td>
+                <th>Symbol</th>
+                <th>Signal</th>
+                <th>Time (UTC)</th>
             </tr>
-        {% endif %}
+        </thead>
+        <tbody>
+            {% for sig in signals %}
+            <tr>
+                <td>{{ sig.symbol }}</td>
+                <td>{{ sig.signal }}</td>
+                <td>{{ sig.time }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
     </table>
+
+    <script>
+        const socket = io();
+
+        // Listen for new signals from the backend
+        socket.on('update_signal', function(data) {
+            const table = document.getElementById('signals-table').getElementsByTagName('tbody')[0];
+
+            // Append new row
+            const row = table.insertRow();
+            const cellSymbol = row.insertCell(0);
+            const cellSignal = row.insertCell(1);
+            const cellTime = row.insertCell(2);
+
+            cellSymbol.innerText = data.symbol;
+            cellSignal.innerText = data.signal;
+            cellTime.innerText = data.time;
+
+            // Update last update timestamp
+            document.getElementById('last-update').innerText = new Date().toISOString().slice(0,19).replace('T', ' ');
+        });
+    </script>
 </body>
 </html>
