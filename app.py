@@ -27,7 +27,7 @@ latest_signals = {}
 # Start the live fetching thread for Pocket Option data, dashboard, and Telegram alerts
 threading.Thread(
     target=start_fetching, 
-    args=(SYMBOLS, TIMEFRAMES, socketio, latest_signals),  # pass latest_signals
+    args=(SYMBOLS, TIMEFRAMES, socketio, latest_signals), ✅ # pass latest_signals
     daemon=True
 ).start()
 
