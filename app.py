@@ -33,8 +33,12 @@ threading.Thread(
 
 @app.route("/")
 def dashboard():
-    """Render dashboard with the latest signals."""
-    return render_template("dashboard.html", signals=latest_signals)
+    """Render dashboard with the latest signals and current time."""
+    return render_template(
+        "dashboard.html",
+        signals=latest_signals,
+        now=datetime.utcnow()   # ✅ add this so Last update works
+    )
 
 if __name__ == "__main__":
     logging.info("Starting Flask-SocketIO app on 0.0.0.0:5000")
