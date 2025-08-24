@@ -138,14 +138,38 @@ def prefill_historical_candles(symbols, timeframes, fetch_historical_fn):
             except Exception as e:
                 print(f"[PREFILL ERROR] {symbol} {tf}: {e}")
 
-# --- Fetch historical candles wrapper ---
-def fetch_historical_candles(symbol, period_seconds, count):
+# --- Pre-fill historical candles function (threaded) ---
+import threading
+
+def prefill_historical_candles(symbols, timeframes, fetch_historical_fn):
     """
-    Placeholder for actual historical candles fetch from Pocket Option.
-    This should call the broker API or WebSocket history endpoint if available.
+    Fetch and pre-fill candles per symbol/timeframe using fetch_historical_fn(symbol, period, count).
+    This version fetches each symbol in a separate thread for faster startup.
     """
-    # For now, return an empty list. Replace with actual fetching logic.
-    return []
+    TIMEFRAME_MAP = {"1m": 60, "2m": 120, "3m": 180, "5m": 300}
+
+    def fetch_for_symbol(symbol):
+        for tf in timeframes:
+            period_seconds = TIMEFRAME_MAP.get(tf)
+            if not period_seconds:
+                continue
+            try:
+                candles = fetch_historical_fn(symbol, period_seconds, 50)  # Fetch last 50 candles
+                if candles:
+                    market_data[symbol]["candles"][period_seconds] = candles[-50:]
+                    print(f"[PREFILL] {symbol} {tf}: Loaded {len(candles)} historical candles")
+            except Exception as e:
+                print(f"[PREFILL ERROR] {symbol} {tf}: {e}")
+
+    threads = []
+    for symbol in symbols:
+        t = threading.Thread(target=fetch_for_symbol, args=(symbol,), daemon=True)
+        t.start()
+        threads.append(t)
+
+    # Optionally wait for all threads to complete
+    for t in threads:
+        t.join()
 
 # --- Updated start_fetching with immediate signal emission ---
 def start_fetching(symbols, timeframes, socketio, latest_signals):
