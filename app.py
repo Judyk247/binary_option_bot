@@ -1,6 +1,5 @@
 # app.py
 import threading
-import time
 import logging
 from flask import Flask, render_template
 from flask_cors import CORS
@@ -8,7 +7,7 @@ from flask_socketio import SocketIO
 from strategy import analyze_candles
 from telegram_utils import send_telegram_message
 from data_fetcher import start_fetching
-from datetime import datetime
+from datetime import datetime, timezone
 from config import SYMBOLS, TIMEFRAMES, TELEGRAM_CHAT_IDS
 
 # Flask app setup
@@ -23,7 +22,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s"
 )
 
-latest_signals = {}
+latest_signals = []  # <-- changed from {} to []
 
 # Start the live fetching thread for Pocket Option data, dashboard, and Telegram alerts
 threading.Thread(
@@ -38,7 +37,7 @@ def dashboard():
     return render_template(
         "dashboard.html",
         signals=latest_signals,
-        now=datetime.utcnow()    # add this so Last update works
+        now=datetime.now(timezone.utc)  # timezone-aware datetime
     )
 
 if __name__ == "__main__":
