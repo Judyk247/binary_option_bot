@@ -9,6 +9,7 @@ from strategy import analyze_candles  # Your EMA/Stochastic/Alligator logic
 from telegram_utils import send_telegram_message  # Your Telegram alert function
 from config import TELEGRAM_CHAT_IDS
 import pandas as pd
+from datetime import datetime
 
 # Store incoming data for all assets and timeframes
 market_data = defaultdict(lambda: {"ticks": [], "candles": defaultdict(list)})
@@ -136,40 +137,40 @@ def start_fetching(symbols, timeframes, socketio, latest_signals):
     while True:
         for symbol in symbols:
             for tf in timeframes:
-    try:
-    signal = analyze_candles(df)
-    signal_data = {
-        "symbol": symbol,
-        "signal": signal or "None",
-        "timeframe": tf,
-        "time": datetime.utcnow().strftime("%H:%M:%S")
-    }
-
-    # Append to latest_signals list (keep last 50)
-    latest_signals.append(signal_data)
-    if len(latest_signals) > 50:
-        latest_signals.pop(0)
-
-    # Emit to dashboard
-    socketio.emit("update_signal", signal_data)
-
-    # Send Telegram alert only if real signal
-    if signal:
-        for chat_id in TELEGRAM_CHAT_IDS:
-            if chat_id:
                 try:
-                    send_telegram_message(chat_id, f"{symbol} {tf} signal: {signal}")
+                    signal = analyze_candles(df)
+                    signal_data = {
+                        "symbol": symbol,
+                        "signal": signal or "None",
+                        "timeframe": tf,
+                        "time": datetime.utcnow().strftime("%H:%M:%S")
+                    }
+
+                    # Append to latest_signals list (keep last 50)
+                    latest_signals.append(signal_data)
+                    if len(latest_signals) > 50:
+                        latest_signals.pop(0)
+
+                    # Emit to dashboard
+                    socketio.emit("update_signal", signal_data)
+
+                    # Send Telegram alert only if real signal
+                    if signal:
+                        for chat_id in TELEGRAM_CHAT_IDS:
+                            if chat_id:
+                                try:
+                                    send_telegram_message(chat_id, f"{symbol} {tf} signal: {signal}")
+                                except Exception as e:
+                                    logging.error(f"[TELEGRAM ERROR] {e}")
+                        logging.info(f"[SIGNAL] {symbol} {tf}: {signal}")
+                    else:
+                        logging.info(f"[NO SIGNAL] {symbol} {tf}")
+
                 except Exception as e:
-                    logging.error(f"[TELEGRAM ERROR] {e}")
-        logging.info(f"[SIGNAL] {symbol} {tf}: {signal}")
-    else:
-        logging.info(f"[NO SIGNAL] {symbol} {tf}")
+                    logging.error(f"[ERROR processing {symbol} {tf}] {e}")
 
-except Exception as e:
-    logging.error(f"[ERROR processing {symbol} {tf}] {e}")
-
-# Debug log at end of loop
-logging.info(f"Latest signals count: {len(latest_signals)}")
+        # Debug log at end of loop
+        logging.info(f"Latest signals count: {len(latest_signals)}")
 
 def tf_to_seconds(tf):
     """Convert string timeframe (1m, 2m, 3m, 5m) to seconds"""
