@@ -17,6 +17,9 @@ market_data = defaultdict(lambda: {"ticks": [], "candles": defaultdict(list)})
 # Supported candle periods in seconds
 CANDLE_PERIODS = [60, 120, 180, 300]  # 1m, 2m, 3m, 5m
 
+# Store OTC symbols dynamically
+otc_symbols = []
+
 POCKET_WS_URL = "wss://chat-po.site/cabinet-client/socket.io/?EIO=4&transport=websocket"
 
 # Keep track of last heartbeat time
@@ -40,6 +43,7 @@ def on_open(ws):
     print("[SEND] Auth message sent ")
 
 def on_message(ws, message):
+    global otc_symbols
     if message.startswith("42"):
         try:
             data = json.loads(message[2:])
@@ -48,21 +52,21 @@ def on_message(ws, message):
 
             if event == "assets":
                 print("[RECV] Assets list received ")
-                assets = [a["symbol"] for a in payload if a.get("enabled")]
-                print(f"[DEBUG] Assets enabled: {assets[:5]} ... ({len(assets)} total)")
+                # Filter only OTC currency pairs
+                otc_symbols = [a["symbol"] for a in payload if a.get("enabled") and a.get("type")=="currency_pair" and a.get("category")=="OTC"]
+                print(f"[DEBUG] OTC symbols: {otc_symbols[:5]} ... ({len(otc_symbols)} total)")
 
-                # Subscribe to ticks and candles
-                for asset in assets:
+                # Subscribe to ticks and candles for OTC symbols
+                for asset in otc_symbols:
                     ws.send(f'42["subscribe",{{"type":"ticks","asset":"{asset}"}}]')
                     for period in CANDLE_PERIODS:
                         ws.send(f'42["subscribe",{{"type":"candles","asset":"{asset}","period":{period}}}]')
-                print(f"[SUBSCRIBE] Subscribed to {len(assets)} assets 🔥")
+                print(f"[SUBSCRIBE] Subscribed to {len(otc_symbols)} OTC assets 🔥")
 
             elif event == "ticks" and payload:
                 asset = payload["asset"]
                 tick = {"time": payload["time"], "price": payload["price"]}
                 market_data[asset]["ticks"].append(tick)
-                print(f"[TICK] {asset}: {tick}")
 
             elif event == "candles" and payload:
                 asset = payload["asset"]
@@ -76,7 +80,6 @@ def on_message(ws, message):
                     "volume": payload["volume"],
                 }
                 market_data[asset]["candles"][period].append(candle)
-                print(f"[CANDLE] {asset} {period}s: close={candle['close']}")
 
         except Exception as e:
             print("[ERROR parsing message]", e)
@@ -98,10 +101,8 @@ def run_ws():
                 on_error=on_error,
                 header=["Origin: https://m.pocketoption.com"]
             )
-
             # Start heartbeat in background
             threading.Thread(target=send_heartbeat, args=(ws,), daemon=True).start()
-
             ws.run_forever()
         except Exception as e:
             print("[FATAL ERROR]", e)
@@ -135,8 +136,12 @@ def prefill_historical_candles(symbols, timeframes, fetch_historical_fn):
             except Exception as e:
                 print(f"[PREFILL ERROR] {symbol} {tf}: {e}")
 
-# --- Updated start_fetching with full logging and sanity check ---
-def start_fetching(symbols, timeframes, socketio, latest_signals):
+# --- Updated start_fetching with dynamic OTC symbols ---
+def start_fetching(timeframes, socketio, latest_signals):
+    """
+    Continuously fetch Pocket Option candles for OTC symbols & timeframes,
+    analyze signals, and emit to dashboard via socketio.
+    """
     import logging
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
     logging.info("Started start_fetching thread for dashboard & Telegram alerts.")
@@ -144,7 +149,7 @@ def start_fetching(symbols, timeframes, socketio, latest_signals):
     TIMEFRAME_MAP = {"1m": 60, "2m": 120, "3m": 180, "5m": 300}
 
     while True:
-        for symbol in symbols:
+        for symbol in otc_symbols:  # Use dynamic OTC symbol list
             for tf in timeframes:
                 try:
                     period_seconds = TIMEFRAME_MAP.get(tf)
