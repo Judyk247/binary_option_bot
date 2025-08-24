@@ -123,7 +123,7 @@ def get_market_data():
     return market_data
 
 # --- New function for Flask dashboard ---
-def start_fetching(symbols, timeframes, socketio):
+def start_fetching(symbols, timeframes, socketio latest_signals):
     """
     Continuously fetch Pocket Option candles for symbols & timeframes,
     analyze signals, and emit to dashboard via socketio.
@@ -137,6 +137,10 @@ def start_fetching(symbols, timeframes, socketio):
                 df = pd.DataFrame(candles)
                 print(f"[DEBUG] Dashboard check {symbol} {tf} (candles={len(df)})")
                 signal = analyze_candles(df)
+                # ✅ Update the dashboard state
+                latest_signals[f"{symbol}_{tf}"] = signal  
+
+                # ✅ Emit live update to frontend
                 socketio.emit("new_signal", {"symbol": symbol, "timeframe": tf, "signal": signal}, broadcast=True)
                 if signal:
                     print(f"[SIGNAL→DASHBOARD] {symbol} {tf}: {signal}")
