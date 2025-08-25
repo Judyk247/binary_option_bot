@@ -5,6 +5,42 @@
     <title>Binary Options Dashboard</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
     <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .toggle-container {
+            margin-bottom: 15px;
+        }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+        .switch input {display: none;}
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px; width: 26px;
+            left: 4px; bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: #4CAF50;
+        }
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -23,7 +59,17 @@
 </head>
 <body>
     <h1>Binary Options Dashboard</h1>
-    <p>Last update: <span id="last-update">{{ now.strftime('%Y-%m-%d %H:%M:%S') }}</span> UTC</p>
+
+    <!-- Toggle Switch -->
+    <div class="toggle-container">
+        <label class="switch">
+            <input type="checkbox" id="mode-toggle">
+            <span class="slider"></span>
+        </label>
+        <span id="mode-label">Test Mode</span>
+    </div>
+
+    <p>Last update: <span id="last-update">Loading...</span> UTC</p>
     
     <table id="signals-table">
         <thead>
@@ -35,38 +81,47 @@
             </tr>
         </thead>
         <tbody>
-            {% for sig in signals %}
-            <tr>
-                <td>{{ sig.symbol }}</td>
-                <td>{{ sig.signal }}</td>
-                <td>{{ sig.time }}</td>
-                <td>{{ sig.timeframe }}</td>
-            </tr>
-            {% endfor %}
+            <!-- Filled dynamically -->
         </tbody>
     </table>
 
     <script>
         const socket = io();
 
-        // Listen for new signals from the backend
+        // Get mode status on load
+        fetch("/get_mode")
+            .then(res => res.json())
+            .then(data => {
+                const toggle = document.getElementById("mode-toggle");
+                const label = document.getElementById("mode-label");
+                toggle.checked = (data.mode === "live");
+                label.innerText = data.mode === "live" ? "Live Mode" : "Test Mode";
+            });
+
+        // Handle toggle click
+        document.getElementById("mode-toggle").addEventListener("change", function() {
+            const newMode = this.checked ? "live" : "test";
+            fetch(`/set_mode/${newMode}`, {method: "POST"})
+                .then(() => {
+                    document.getElementById("mode-label").innerText = 
+                        newMode === "live" ? "Live Mode" : "Test Mode";
+                    location.reload(); // reload dashboard with new mode
+                });
+        });
+
+        // Listen for new signals
         socket.on('new_signal', function(data) {
             const table = document.getElementById('signals-table').getElementsByTagName('tbody')[0];
 
             // Append new row
             const row = table.insertRow();
-            const cellSymbol = row.insertCell(0);
-            const cellSignal = row.insertCell(1);
-            const cellTime = row.insertCell(2);
-            const cellTimeframe = row.insertCell(3);
+            row.insertCell(0).innerText = data.symbol;
+            row.insertCell(1).innerText = data.signal;
+            row.insertCell(2).innerText = data.time;
+            row.insertCell(3).innerText = data.timeframe;
 
-            cellSymbol.innerText = data.symbol;
-            cellSignal.innerText = data.signal;
-            cellTime.innerText = data.time;  // Use backend UTC timestamp
-            cellTimeframe.innerText = data.timeframe;
-
-            // Update last update timestamp using backend UTC time
-            document.getElementById('last-update').innerText = data.time.replace('T', ' ').slice(0,19);
+            // Update last update timestamp
+            document.getElementById('last-update').innerText = data.time;
 
             // Keep only last 50 rows
             while(table.rows.length > 50){
