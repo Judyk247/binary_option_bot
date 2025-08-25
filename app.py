@@ -1,4 +1,3 @@
-# app.py
 import threading
 import logging
 from flask import Flask, render_template
@@ -9,6 +8,14 @@ from telegram_utils import send_telegram_message
 from data_fetcher import start_fetching
 from datetime import datetime, timezone
 from config import SYMBOLS, TIMEFRAMES, TELEGRAM_CHAT_IDS
+import random
+import time
+
+# -----------------------------
+# TOGGLE: Set True for testing dashboard with fake signals
+# Set False for live Pocket Option signals
+DEBUG_TEST_SIGNALS = True
+# -----------------------------
 
 # Flask app setup
 app = Flask(__name__)
@@ -22,27 +29,43 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s"
 )
 
-latest_signals = []  # shared list for dashboard
+latest_signals = []  # Store latest signals for dashboard
 
-def start_fetching_wrapper(symbols, timeframes, socketio, latest_signals):
-    """
-    Wrapper around start_fetching to ensure emitted signals are also updated in latest_signals.
-    """
-    def emit_signal(signal):
-        # Update the shared list in-place
-        latest_signals.append(signal)
-        logging.info(f"Emitting signal to frontend: {signal}")
-        socketio.emit('new_signal', signal)
+# -----------------------------
+# Test signal generator for debug mode
+def generate_test_signals(latest_signals, socketio):
+    symbols = ["EURUSD", "GBPUSD", "USDJPY"]
+    timeframes = ["1m", "3m", "5m"]
+    while True:
+        for symbol in symbols:
+            for tf in timeframes:
+                signal = random.choice(["BUY", "SELL", "HOLD"])
+                new_signal = {
+                    "symbol": symbol,
+                    "signal": signal,
+                    "time": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                    "timeframe": tf
+                }
+                latest_signals.append(new_signal)
+                socketio.emit("new_signal", new_signal, broadcast=True)
+        time.sleep(5)
+# -----------------------------
 
-    # Call your original start_fetching, passing emit_signal as callback
-    start_fetching(symbols, timeframes, socketio, latest_signals)
-
-# Start the live fetching thread
-threading.Thread(
-    target=start_fetching_wrapper, 
-    args=(SYMBOLS, TIMEFRAMES, socketio, latest_signals),
-    daemon=True
-).start()
+# -----------------------------
+# Start appropriate background thread
+if DEBUG_TEST_SIGNALS:
+    threading.Thread(
+        target=generate_test_signals,
+        args=(latest_signals, socketio),
+        daemon=True
+    ).start()
+else:
+    threading.Thread(
+        target=start_fetching, 
+        args=(SYMBOLS, TIMEFRAMES, socketio, latest_signals),
+        daemon=True
+    ).start()
+# -----------------------------
 
 @app.route("/")
 def dashboard():
