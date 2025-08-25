@@ -129,7 +129,7 @@ def start_fetching(symbols, timeframes, socketio, latest_signals):
                 signal_data = {
                     "symbol": symbol,
                     "signal": signal if signal else "HOLD",
-                    "time": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                    "datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
                     "timeframe": tf
                 }
 
