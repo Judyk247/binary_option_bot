@@ -111,49 +111,46 @@ def get_market_data():
     """Return the latest market data snapshot"""
     return market_data
 
-# --- Modified start_fetching for Flask dashboard ---
+# --- New function for Flask dashboard / Live mode ---
 def start_fetching(symbols, timeframes, socketio, latest_signals):
     """
     Continuously fetch Pocket Option candles for symbols & timeframes,
-    analyze signals, and emit to dashboard via socketio.
+    analyze signals, update latest_signals list, and emit to dashboard via socketio.
     """
     while True:
         for symbol in symbols:
             for tf in timeframes:
-                period_seconds = tf_to_seconds(tf)
-                candles = market_data[symbol]["candles"].get(period_seconds, [])
+                candles = market_data[symbol]["candles"].get(tf_to_seconds(tf), [])
                 if not candles:
                     continue
                 df = pd.DataFrame(candles)
+                # Run your strategy
                 signal = analyze_candles(df)
-                
-                # Only process if signal exists
-                if signal:
-                    signal_dict = {
-                        "symbol": symbol,
-                        "timeframe": tf,
-                        "signal": signal,
-                        "time": datetime.now(timezone.utc).isoformat()
-                    }
+                signal_data = {
+                    "symbol": symbol,
+                    "signal": signal if signal else "HOLD",
+                    "time": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                    "timeframe": tf
+                }
 
-                    # Append to latest_signals in-place
-                    latest_signals.append(signal_dict)
-                    
-                    # Emit live update to frontend
-                    socketio.emit("new_signal", signal_dict, broadcast=True)
-                    print(f"[SIGNAL→DASHBOARD] {symbol} {tf}: {signal}")
+                # Update latest_signals list for dashboard
+                # Remove previous signal for same symbol+tf if exists
+                latest_signals[:] = [s for s in latest_signals if not (s["symbol"] == symbol and s["timeframe"] == tf)]
+                latest_signals.append(signal_data)
 
-                    # Send Telegram messages
+                # Emit live update to frontend
+                socketio.emit("new_signal", signal_data, broadcast=True)
+
+                # Send Telegram alert only if there is a BUY/SELL signal
+                if signal in ["BUY", "SELL"]:
                     for chat_id in TELEGRAM_CHAT_IDS:
                         if chat_id:
                             try:
                                 send_telegram_message(chat_id, f"{symbol} {tf} signal: {signal}")
                             except Exception as e:
                                 print("[TELEGRAM ERROR]", e)
-                else:
-                    print(f"[NO SIGNAL→DASHBOARD] {symbol} {tf}")
-        time.sleep(30)
 
+        time.sleep(5)  # Check every 5 seconds
 def tf_to_seconds(tf):
     """Convert string timeframe (1m, 2m, 3m, 5m) to seconds"""
     return int(tf[:-1]) * 60
