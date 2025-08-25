@@ -9,6 +9,7 @@ from strategy import analyze_candles  # Your EMA/Stochastic/Alligator logic
 from telegram_utils import send_telegram_message  # Your Telegram alert function
 from config import TELEGRAM_CHAT_IDS
 import pandas as pd
+from datetime import datetime, timezone
 
 # Store incoming data for all assets and timeframes
 market_data = defaultdict(lambda: {"ticks": [], "candles": defaultdict(list)})
@@ -62,7 +63,6 @@ def on_message(ws, message):
                 asset = payload["asset"]
                 tick = {"time": payload["time"], "price": payload["price"]}
                 market_data[asset]["ticks"].append(tick)
-                print(f"[TICK] {asset}: {tick}")
 
             elif event == "candles" and payload:
                 asset = payload["asset"]
@@ -76,17 +76,6 @@ def on_message(ws, message):
                     "volume": payload["volume"],
                 }
                 market_data[asset]["candles"][period].append(candle)
-                print(f"[CANDLE] {asset} {period}s: close={candle['close']}")
-
-                # Analyze strategy
-                df = pd.DataFrame(market_data[asset]["candles"][period])
-                print(f"[DEBUG] Running strategy for {asset} {period}s (candles={len(df)})")
-                signal = analyze_candles(df)
-                if signal:
-                    print(f"[SIGNAL] {asset} {period}s → {signal}")
-                    send_telegram_message(asset, signal, period)
-                else:
-                    print(f"[NO SIGNAL] {asset} {period}s")
 
         except Exception as e:
             print("[ERROR parsing message]", e)
@@ -122,7 +111,7 @@ def get_market_data():
     """Return the latest market data snapshot"""
     return market_data
 
-# --- New function for Flask dashboard ---
+# --- Modified start_fetching for Flask dashboard ---
 def start_fetching(symbols, timeframes, socketio, latest_signals):
     """
     Continuously fetch Pocket Option candles for symbols & timeframes,
@@ -131,19 +120,30 @@ def start_fetching(symbols, timeframes, socketio, latest_signals):
     while True:
         for symbol in symbols:
             for tf in timeframes:
-                candles = market_data[symbol]["candles"].get(tf_to_seconds(tf), [])
+                period_seconds = tf_to_seconds(tf)
+                candles = market_data[symbol]["candles"].get(period_seconds, [])
                 if not candles:
                     continue
                 df = pd.DataFrame(candles)
-                print(f"[DEBUG] Dashboard check {symbol} {tf} (candles={len(df)})")
                 signal = analyze_candles(df)
-                # ✅ Update the dashboard state
-                latest_signals[f"{symbol}_{tf}"] = signal  
-
-                # ✅ Emit live update to frontend
-                socketio.emit("new_signal", {"symbol": symbol, "timeframe": tf, "signal": signal}, broadcast=True)
+                
+                # Only process if signal exists
                 if signal:
+                    signal_dict = {
+                        "symbol": symbol,
+                        "timeframe": tf,
+                        "signal": signal,
+                        "time": datetime.now(timezone.utc).isoformat()
+                    }
+
+                    # Append to latest_signals in-place
+                    latest_signals.append(signal_dict)
+                    
+                    # Emit live update to frontend
+                    socketio.emit("new_signal", signal_dict, broadcast=True)
                     print(f"[SIGNAL→DASHBOARD] {symbol} {tf}: {signal}")
+
+                    # Send Telegram messages
                     for chat_id in TELEGRAM_CHAT_IDS:
                         if chat_id:
                             try:
