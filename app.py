@@ -1,6 +1,6 @@
 import threading
 import logging
-from flask import Flask, render_template
+from flask import Flask, render_template, jsonify, request
 from flask_cors import CORS
 from flask_socketio import SocketIO
 from strategy import analyze_candles
@@ -12,9 +12,8 @@ import random
 import time
 
 # -----------------------------
-# TOGGLE: Set True for testing dashboard with fake signals
-# Set False for live Pocket Option signals
-DEBUG_TEST_SIGNALS = True
+# Runtime toggle (default = Test)
+mode = {"test_signals": True}
 # -----------------------------
 
 # Flask app setup
@@ -30,52 +29,70 @@ logging.basicConfig(
 )
 
 latest_signals = []  # Store latest signals for dashboard
+MAX_SIGNALS = 50     # Keep only the last 50
 
 # -----------------------------
 # Test signal generator for debug mode
-def generate_test_signals(latest_signals, socketio):
+def generate_test_signals(latest_signals, socketio, mode):
     symbols = ["EURUSD", "GBPUSD", "USDJPY"]
     timeframes = ["1m", "3m", "5m"]
     while True:
-        for symbol in symbols:
-            for tf in timeframes:
-                signal = random.choice(["BUY", "SELL", "HOLD"])
-                new_signal = {
-                    "symbol": symbol,
-                    "signal": signal,
-                    "time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
-                    "timeframe": tf
-                }
-                latest_signals.append(new_signal)
-                socketio.emit("new_signal", new_signal)
+        if mode["test_signals"]:  # only run when in test mode
+            for symbol in symbols:
+                for tf in timeframes:
+                    signal = random.choice(["BUY", "SELL", "HOLD"])
+                    new_signal = {
+                        "symbol": symbol,
+                        "signal": signal,
+                        "time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+                        "timeframe": tf
+                    }
+                    latest_signals.append(new_signal)
+
+                    # Keep size limited
+                    if len(latest_signals) > MAX_SIGNALS:
+                        latest_signals.pop(0)
+
+                    socketio.emit("new_signal", new_signal)
         time.sleep(5)
 # -----------------------------
 
 # -----------------------------
-# Start appropriate background thread
-if DEBUG_TEST_SIGNALS:
-    threading.Thread(
-        target=generate_test_signals,
-        args=(latest_signals, socketio),
-        daemon=True
-    ).start()
-else:
-    threading.Thread(
-        target=start_fetching, 
-        args=(SYMBOLS, TIMEFRAMES, socketio, latest_signals),
-        daemon=True
-    ).start()
+# Start background threads
+threading.Thread(
+    target=generate_test_signals,
+    args=(latest_signals, socketio, mode),
+    daemon=True
+).start()
+
+threading.Thread(
+    target=start_fetching,
+    args=(SYMBOLS, TIMEFRAMES, socketio, latest_signals),
+    daemon=True
+).start()
 # -----------------------------
 
 @app.route("/")
 def dashboard():
-    """Render dashboard with the latest signals and current time."""
-    logging.info(f"Rendering dashboard with {len(latest_signals)} signals")
-    return render_template(
-        "dashboard.html",
-        signals=latest_signals,
-        now=datetime.now(timezone.utc)
-    )
+    """Render dashboard shell only (table filled by AJAX)."""
+    logging.info("Rendering dashboard page")
+    return render_template("dashboard.html")
+
+@app.route("/signals_data")
+def signals_data():
+    """Return latest signals as JSON for AJAX polling."""
+    return jsonify({
+        "last_update": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+        "signals": latest_signals,
+        "mode": "TEST" if mode["test_signals"] else "LIVE"
+    })
+
+@app.route("/toggle_mode", methods=["POST"])
+def toggle_mode():
+    """Switch between test and live signals."""
+    mode["test_signals"] = not mode["test_signals"]
+    logging.info(f"Toggled mode -> {'TEST' if mode['test_signals'] else 'LIVE'}")
+    return jsonify({"mode": "TEST" if mode["test_signals"] else "LIVE"})
 
 if __name__ == "__main__":
     logging.info("Starting Flask-SocketIO app on 0.0.0.0:5000")
