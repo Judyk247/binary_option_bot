@@ -78,6 +78,7 @@
                 <th>Signal</th>
                 <th>Time (UTC)</th>
                 <th>Timeframe</th>
+                <th>Received At</th> <!-- ✅ Added column -->
             </tr>
         </thead>
         <tbody>
@@ -110,6 +111,7 @@
                     row.insertCell(1).innerText = sig.signal;
                     row.insertCell(2).innerText = sig.time;
                     row.insertCell(3).innerText = sig.timeframe;
+                    row.insertCell(4).innerText = new Date().toISOString().slice(0,19).replace("T"," "); // ✅ Received timestamp
                 });
             });
 
@@ -133,6 +135,7 @@
             row.insertCell(1).innerText = data.signal;
             row.insertCell(2).innerText = data.time;
             row.insertCell(3).innerText = data.timeframe;
+            row.insertCell(4).innerText = new Date().toISOString().slice(0,19).replace("T"," "); // ✅ Received timestamp
 
             // Update last update timestamp
             document.getElementById('last-update').innerText = data.time;
