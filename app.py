@@ -35,7 +35,7 @@ def start_fetching_wrapper(symbols, timeframes, socketio, latest_signals):
         socketio.emit('new_signal', signal)
 
     # Call your original start_fetching, passing emit_signal as callback
-    start_fetching(symbols, timeframes, Socketio, latest_signals)
+    start_fetching(symbols, timeframes, socketio, latest_signals)
 
 # Start the live fetching thread
 threading.Thread(
