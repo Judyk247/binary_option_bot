@@ -6,7 +6,6 @@ from collections import defaultdict
 from credentials import POCKET_SESSION_TOKEN, POCKET_USER_ID, POCKET_ACCOUNT_URL
 from strategy import analyze_candles
 from telegram_utils import send_telegram_message
-from config import TELEGRAM_CHAT_IDS, otc_symbols  # otc_symbols imported from config
 import pandas as pd
 from datetime import datetime
 
