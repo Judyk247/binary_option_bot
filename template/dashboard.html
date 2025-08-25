@@ -50,7 +50,7 @@
         const socket = io();
 
         // Listen for new signals from the backend
-        socket.on('update_signal', function(data) {
+        socket.on('new_signal', function(data) {
             const table = document.getElementById('signals-table').getElementsByTagName('tbody')[0];
 
             // Append new row
@@ -62,13 +62,13 @@
 
             cellSymbol.innerText = data.symbol;
             cellSignal.innerText = data.signal;
-            cellTime.innerText = data.time;
+            cellTime.innerText = data.time;  // Use backend UTC timestamp
             cellTimeframe.innerText = data.timeframe;
 
-            // Update last update timestamp
-            document.getElementById('last-update').innerText = new Date().toISOString().slice(0,19).replace('T', ' ');
+            // Update last update timestamp using backend UTC time
+            document.getElementById('last-update').innerText = data.time.replace('T', ' ').slice(0,19);
 
-            // Optional: keep only last 50 rows
+            // Keep only last 50 rows
             while(table.rows.length > 50){
                 table.deleteRow(0);
             }
