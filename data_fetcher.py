@@ -139,7 +139,7 @@ def start_fetching(symbols, timeframes, socketio, latest_signals):
                 latest_signals.append(signal_data)
 
                 # Emit live update to frontend
-                socketio.emit("new_signal", signal_data, broadcast=True)
+                socketio.emit("new_signal", signal_data)
 
                 # Send Telegram alert only if there is a BUY/SELL signal
                 if signal in ["BUY", "SELL"]:
