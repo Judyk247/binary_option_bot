@@ -43,11 +43,11 @@ def generate_test_signals(latest_signals, socketio):
                 new_signal = {
                     "symbol": symbol,
                     "signal": signal,
-                    "time": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                    "time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
                     "timeframe": tf
                 }
                 latest_signals.append(new_signal)
-                socketio.emit("new_signal", new_signal, broadcast=True)
+                socketio.emit("new_signal", new_signal)
         time.sleep(5)
 # -----------------------------
 
