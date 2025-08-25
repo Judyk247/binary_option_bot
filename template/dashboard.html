@@ -66,7 +66,7 @@
             <input type="checkbox" id="mode-toggle">
             <span class="slider"></span>
         </label>
-        <span id="mode-label">Test Mode</span>
+        <span id="mode-label">Loading...</span>
     </div>
 
     <p>Last update: <span id="last-update">Loading...</span> UTC</p>
@@ -88,24 +88,38 @@
     <script>
         const socket = io();
 
-        // Get mode status on load
-        fetch("/get_mode")
+        // Initialize dashboard state from backend
+        fetch("/signals_data")
             .then(res => res.json())
             .then(data => {
+                // Mode
                 const toggle = document.getElementById("mode-toggle");
                 const label = document.getElementById("mode-label");
-                toggle.checked = (data.mode === "live");
-                label.innerText = data.mode === "live" ? "Live Mode" : "Test Mode";
+                toggle.checked = (data.mode === "LIVE");
+                label.innerText = data.mode === "LIVE" ? "Live Mode" : "Test Mode";
+
+                // Last update
+                document.getElementById("last-update").innerText = data.last_update;
+
+                // Fill table initially
+                const table = document.getElementById('signals-table').getElementsByTagName('tbody')[0];
+                table.innerHTML = "";
+                data.signals.forEach(sig => {
+                    const row = table.insertRow();
+                    row.insertCell(0).innerText = sig.symbol;
+                    row.insertCell(1).innerText = sig.signal;
+                    row.insertCell(2).innerText = sig.time;
+                    row.insertCell(3).innerText = sig.timeframe;
+                });
             });
 
         // Handle toggle click
         document.getElementById("mode-toggle").addEventListener("change", function() {
-            const newMode = this.checked ? "live" : "test";
-            fetch(`/set_mode/${newMode}`, {method: "POST"})
-                .then(() => {
+            fetch("/toggle_mode", {method: "POST"})
+                .then(res => res.json())
+                .then(data => {
                     document.getElementById("mode-label").innerText = 
-                        newMode === "live" ? "Live Mode" : "Test Mode";
-                    location.reload(); // reload dashboard with new mode
+                        data.mode === "LIVE" ? "Live Mode" : "Test Mode";
                 });
         });
 
