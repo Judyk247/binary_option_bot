@@ -87,9 +87,27 @@ def signals_data():
         "mode": "TEST" if mode["test_signals"] else "LIVE"
     })
 
+@app.route("/get_mode", methods=["GET"])
+def get_mode():
+    """Return current mode (TEST or LIVE)."""
+    return jsonify({"mode": "TEST" if mode["test_signals"] else "LIVE"})
+
+@app.route("/set_mode/<string:new_mode>", methods=["POST"])
+def set_mode(new_mode):
+    """Set mode explicitly via frontend toggle."""
+    if new_mode.upper() == "TEST":
+        mode["test_signals"] = True
+    elif new_mode.upper() == "LIVE":
+        mode["test_signals"] = False
+    else:
+        return jsonify({"error": "Invalid mode"}), 400
+
+    logging.info(f"Mode set -> {'TEST' if mode['test_signals'] else 'LIVE'}")
+    return jsonify({"mode": "TEST" if mode["test_signals"] else "LIVE"})
+
 @app.route("/toggle_mode", methods=["POST"])
 def toggle_mode():
-    """Switch between test and live signals."""
+    """Optional: flip mode manually."""
     mode["test_signals"] = not mode["test_signals"]
     logging.info(f"Toggled mode -> {'TEST' if mode['test_signals'] else 'LIVE'}")
     return jsonify({"mode": "TEST" if mode["test_signals"] else "LIVE"})
