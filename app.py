@@ -22,22 +22,36 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s"
 )
 
-latest_signals = []  # <-- changed from {} to []
+latest_signals = []  # shared list for dashboard
 
-# Start the live fetching thread for Pocket Option data, dashboard, and Telegram alerts
+def start_fetching_wrapper(symbols, timeframes, socketio, latest_signals):
+    """
+    Wrapper around start_fetching to ensure emitted signals are also updated in latest_signals.
+    """
+    def emit_signal(signal):
+        # Update the shared list in-place
+        latest_signals.append(signal)
+        logging.info(f"Emitting signal to frontend: {signal}")
+        socketio.emit('new_signal', signal)
+
+    # Call your original start_fetching, passing emit_signal as callback
+    start_fetching(symbols, timeframes, emit_signal)
+
+# Start the live fetching thread
 threading.Thread(
-    target=start_fetching, 
-    args=(SYMBOLS, TIMEFRAMES, socketio, latest_signals),  # pass latest_signals
+    target=start_fetching_wrapper, 
+    args=(SYMBOLS, TIMEFRAMES, socketio, latest_signals),
     daemon=True
 ).start()
 
 @app.route("/")
 def dashboard():
     """Render dashboard with the latest signals and current time."""
+    logging.info(f"Rendering dashboard with {len(latest_signals)} signals")
     return render_template(
         "dashboard.html",
         signals=latest_signals,
-        now=datetime.now(timezone.utc)  # timezone-aware datetime
+        now=datetime.now(timezone.utc)
     )
 
 if __name__ == "__main__":
