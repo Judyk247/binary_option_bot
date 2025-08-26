@@ -81,9 +81,12 @@ def dashboard():
 @app.route("/signals_data")
 def signals_data():
     """Return latest signals as JSON for AJAX polling."""
+    signals_out = latest_signals if latest_signals else [
+        {"symbol": "-", "signal": "No signals yet", "time": "-", "timeframe": "-"}
+    ]
     return jsonify({
         "last_update": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
-        "signals": latest_signals,
+        "signals": signals_out,
         "mode": "TEST" if mode["test_signals"] else "LIVE"
     })
 
@@ -111,6 +114,15 @@ def toggle_mode():
     mode["test_signals"] = not mode["test_signals"]
     logging.info(f"Toggled mode -> {'TEST' if mode['test_signals'] else 'LIVE'}")
     return jsonify({"mode": "TEST" if mode["test_signals"] else "LIVE"})
+
+# -----------------------------
+# Emit signals immediately to new dashboard clients
+@socketio.on("connect")
+def on_connect():
+    logging.info("Client connected, sending current signals...")
+    for sig in latest_signals:
+        socketio.emit("new_signal", sig)
+# -----------------------------
 
 if __name__ == "__main__":
     logging.info("Starting Flask-SocketIO app on 0.0.0.0:5000")
