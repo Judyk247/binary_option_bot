@@ -62,9 +62,11 @@ def detect_bearish_engulfing(df):
     return last['close'] < last['open'] and prev['close'] > prev['open'] \
            and last['open'] > prev['close'] and last['close'] < prev['open']
 
-def analyze_candles(df):
+def analyze_candles(df, debug=False):
     """Return 'buy', 'sell', or None signal"""
     if len(df) < 30:
+        if debug:
+            print("Not enough candles: have", len(df))
         return None
 
     ha_df = heikin_ashi(df)
@@ -101,6 +103,16 @@ def analyze_candles(df):
         bearish_pattern and
         atr.iloc[last_idx] > 0
     )
+
+    if debug:
+        print("--- Candle Analysis Debug ---")
+        print("Close:", ha_df['close'].iloc[last_idx])
+        print("Jaw:", jaw.iloc[last_idx], "Teeth:", teeth.iloc[last_idx], "Lips:", lips.iloc[last_idx])
+        print("Stoch K:", k.iloc[last_idx], "D:", d.iloc[last_idx])
+        print("Bullish Bias:", bullish_bias, "Bearish Bias:", bearish_bias)
+        print("Bullish Engulfing:", bullish_pattern, "Bearish Engulfing:", bearish_pattern)
+        print("ATR:", atr.iloc[last_idx])
+        print("BUY:", is_buy, "SELL:", is_sell)
 
     if is_buy:
         return "buy"
