@@ -10,12 +10,15 @@
         }
         .toggle-container {
             margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
         .switch {
             position: relative;
             display: inline-block;
-            width: 60px;
-            height: 34px;
+            width: 100px;   /* bigger for labels */
+            height: 40px;
         }
         .switch input {display: none;}
         .slider {
@@ -25,21 +28,40 @@
             background-color: #ccc;
             transition: .4s;
             border-radius: 34px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 14px;
+            font-weight: bold;
+            color: white;
+            padding: 0 10px;
         }
         .slider:before {
             position: absolute;
             content: "";
-            height: 26px; width: 26px;
+            height: 32px; width: 32px;
             left: 4px; bottom: 4px;
             background-color: white;
             transition: .4s;
             border-radius: 50%;
         }
+        /* Default = TEST mode (left) */
+        .slider::after {
+            content: "TEST";
+            position: absolute;
+            left: 12px;
+        }
         input:checked + .slider {
             background-color: #4CAF50;
         }
         input:checked + .slider:before {
-            transform: translateX(26px);
+            transform: translateX(60px);
+        }
+        /* When LIVE mode */
+        input:checked + .slider::after {
+            content: "LIVE";
+            right: 12px;
+            left: auto;
         }
         table {
             width: 100%;
@@ -78,7 +100,7 @@
                 <th>Signal</th>
                 <th>Time (UTC)</th>
                 <th>Timeframe</th>
-                <th>Received At</th> <!-- ✅ Added column -->
+                <th>Received At</th>
             </tr>
         </thead>
         <tbody>
@@ -93,16 +115,14 @@
         fetch("/signals_data")
             .then(res => res.json())
             .then(data => {
-                // Mode
                 const toggle = document.getElementById("mode-toggle");
                 const label = document.getElementById("mode-label");
+
                 toggle.checked = (data.mode === "LIVE");
                 label.innerText = data.mode === "LIVE" ? "Live Mode" : "Test Mode";
 
-                // Last update
                 document.getElementById("last-update").innerText = data.last_update;
 
-                // Fill table initially
                 const table = document.getElementById('signals-table').getElementsByTagName('tbody')[0];
                 table.innerHTML = "";
                 data.signals.forEach(sig => {
@@ -111,7 +131,7 @@
                     row.insertCell(1).innerText = sig.signal;
                     row.insertCell(2).innerText = sig.time;
                     row.insertCell(3).innerText = sig.timeframe;
-                    row.insertCell(4).innerText = new Date().toISOString().slice(0,19).replace("T"," "); // ✅ Received timestamp
+                    row.insertCell(4).innerText = new Date().toISOString().slice(0,19).replace("T"," ");
                 });
             });
 
@@ -129,18 +149,15 @@
         socket.on('new_signal', function(data) {
             const table = document.getElementById('signals-table').getElementsByTagName('tbody')[0];
 
-            // Append new row
             const row = table.insertRow();
             row.insertCell(0).innerText = data.symbol;
             row.insertCell(1).innerText = data.signal;
             row.insertCell(2).innerText = data.time;
             row.insertCell(3).innerText = data.timeframe;
-            row.insertCell(4).innerText = new Date().toISOString().slice(0,19).replace("T"," "); // ✅ Received timestamp
+            row.insertCell(4).innerText = new Date().toISOString().slice(0,19).replace("T"," ");
 
-            // Update last update timestamp
             document.getElementById('last-update').innerText = data.time;
 
-            // Keep only last 50 rows
             while(table.rows.length > 50){
                 table.deleteRow(0);
             }
