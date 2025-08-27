@@ -40,10 +40,10 @@ def generate_test_signals(latest_signals, socketio, mode):
         if mode["test_signals"]:  # only run when in test mode
             for symbol in symbols:
                 for tf in timeframes:
-                    signal = random.choice(["BUY", "SELL", "HOLD"])
+                    direction = random.choice(["BUY", "SELL", "HOLD"])
                     new_signal = {
                         "symbol": symbol,
-                        "signal": signal,
+                        "direction": direction,  # <-- renamed from "signal"
                         "time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
                         "timeframe": tf
                     }
@@ -82,7 +82,7 @@ def dashboard():
 def signals_data():
     """Return latest signals as JSON for AJAX polling."""
     signals_out = latest_signals if latest_signals else [
-        {"symbol": "-", "signal": "No signals yet", "time": "-", "timeframe": "-"}
+        {"symbol": "-", "direction": "No signals yet", "time": "-", "timeframe": "-"}
     ]
     return jsonify({
         "last_update": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
