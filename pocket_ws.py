@@ -11,6 +11,15 @@ from credentials import POCKET_SESSION_TOKEN, POCKET_USER_ID, POCKET_ACCOUNT_URL
 
 POCKET_WS_URL = "wss://chat-po.site/cabinet-client/socket.io/?EIO=4&transport=websocket"
 
+# Hardcoded default forex pairs (no crypto, no stocks)
+DEFAULT_SYMBOLS = [
+    "EUR/USD", "GBP/USD", "USD/JPY", "USD/CHF", "AUD/USD", "NZD/USD",
+    "USD/CAD", "EUR/GBP", "EUR/JPY", "GBP/JPY", "AUD/JPY", "NZD/JPY",
+    "EUR/AUD", "EUR/NZD", "EUR/CAD", "EUR/CHF", "GBP/AUD", "GBP/NZD",
+    "GBP/CAD", "GBP/CHF", "AUD/NZD", "AUD/CAD", "AUD/CHF", "NZD/CAD",
+    "NZD/CHF", "CAD/CHF", "CAD/JPY", "CHF/JPY", "EUR/SEK", "EUR/NOK"
+]
+
 
 def on_open(ws):
     print("[OPEN] Connected to Pocket Option WebSocket")
@@ -31,44 +40,27 @@ def on_message(ws, message):
 
             if event == "auth_success":
                 print("[AUTH] Authentication successful ✅")
-                ws.send('42["getAssets", {}]')
-                print("[SEND] Requested all assets list")
 
-            elif event == "assets":
-                print("[RECV] Assets list received ✅")
-                assets = [a["symbol"] for a in payload if a.get("enabled")]
-
-                # Subscribe to all pairs automatically
-                for asset in assets:
-                    for period in [60, 180, 300]:  # 1m, 3m, 5m
-                        ws.send(f'42["subscribe",{{"type":"candles","asset":"{asset}","period":{period}}}]')
+                # Subscribe only to default forex pairs (ticks only)
+                for asset in DEFAULT_SYMBOLS:
                     ws.send(f'42["subscribe",{{"type":"ticks","asset":"{asset}"}}]')
-                print(f"[SUBSCRIBE] Subscribed to {len(assets)} assets 🔥")
+                print(f"[SUBSCRIBE] Subscribed to {len(DEFAULT_SYMBOLS)} forex pairs 🔥")
 
             elif event == "ticks":
                 # Handle ticks data
                 symbol = payload.get("asset")
                 price = payload.get("price")
-                print(f"[TICK] {symbol}: {price}")
+                tick_time = datetime.utcfromtimestamp(payload["time"]).strftime("%Y-%m-%d %H:%M:%S")
+                print(f"[TICK] {symbol}: {price} at {tick_time}")
 
-            elif event == "candles":
-                # Handle candle data
-                symbol = payload.get("asset")
-                timeframe = f"{payload.get('period')//60}m"
-                candle_time = datetime.utcfromtimestamp(payload["time"]).strftime("%Y-%m-%d %H:%M:%S")
-                close_price = payload.get("close")
-
-                print(f"[CANDLE] {symbol} {timeframe} Close={close_price} at {candle_time}")
-
-                # === Stub: emit signal (later plug strategy logic here) ===
-                signal = {
+                # === Stub: Forward tick to bot (bot will aggregate into timeframes) ===
+                tick_data = {
                     "symbol": symbol,
-                    "signal": "BUY",   # placeholder
-                    "timeframe": timeframe,
-                    "time": candle_time
+                    "price": price,
+                    "time": tick_time
                 }
                 if socketio:
-                    socketio.emit("new_signal", signal)
+                    socketio.emit("new_tick", tick_data)
 
         except Exception as e:
             print("[ERROR parsing message]", e)
