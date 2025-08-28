@@ -84,4 +84,4 @@ if __name__ == "__main__":
     # ✅ Always start background workers in LIVE mode
     start_background_workers()
 
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
+    socketio.run(app, host="0.0.0.0", port=5000, debug=False)
