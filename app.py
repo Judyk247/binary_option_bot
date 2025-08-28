@@ -11,6 +11,9 @@ from config import SYMBOLS, TIMEFRAMES, TELEGRAM_CHAT_IDS
 import random
 import time
 
+# 👇 NEW IMPORT
+from pocket_ws import start_pocket_ws  
+
 # -----------------------------
 # Runtime toggle (default = Test)
 mode = {"test_signals": True}
@@ -70,6 +73,12 @@ threading.Thread(
     args=(SYMBOLS, TIMEFRAMES, socketio, latest_signals),
     daemon=True
 ).start()
+
+# 👇 NEW: Start PocketOption WebSocket in background
+threading.Thread(
+    target=start_pocket_ws,
+    daemon=True
+).start()
 # -----------------------------
 
 @app.route("/")
@@ -77,53 +86,3 @@ def dashboard():
     """Render dashboard shell only (table filled by AJAX)."""
     logging.info("Rendering dashboard page")
     return render_template("dashboard.html")
-
-@app.route("/signals_data")
-def signals_data():
-    """Return latest signals as JSON for AJAX polling."""
-    signals_out = latest_signals if latest_signals else [
-        {"symbol": "-", "signal": "No signals yet", "time": "-", "timeframe": "-"}
-    ]
-    return jsonify({
-        "last_update": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
-        "signals": signals_out,
-        "mode": "TEST" if mode["test_signals"] else "LIVE"
-    })
-
-@app.route("/get_mode", methods=["GET"])
-def get_mode():
-    """Return current mode (TEST or LIVE)."""
-    return jsonify({"mode": "TEST" if mode["test_signals"] else "LIVE"})
-
-@app.route("/set_mode/<string:new_mode>", methods=["POST"])
-def set_mode(new_mode):
-    """Set mode explicitly via frontend toggle."""
-    if new_mode.upper() == "TEST":
-        mode["test_signals"] = True
-    elif new_mode.upper() == "LIVE":
-        mode["test_signals"] = False
-    else:
-        return jsonify({"error": "Invalid mode"}), 400
-
-    logging.info(f"Mode set -> {'TEST' if mode['test_signals'] else 'LIVE'}")
-    return jsonify({"mode": "TEST" if mode["test_signals"] else "LIVE"})
-
-@app.route("/toggle_mode", methods=["POST"])
-def toggle_mode():
-    """Optional: flip mode manually."""
-    mode["test_signals"] = not mode["test_signals"]
-    logging.info(f"Toggled mode -> {'TEST' if mode['test_signals'] else 'LIVE'}")
-    return jsonify({"mode": "TEST" if mode["test_signals"] else "LIVE"})
-
-# -----------------------------
-# Emit signals immediately to new dashboard clients
-@socketio.on("connect")
-def on_connect():
-    logging.info("Client connected, sending current signals...")
-    for sig in latest_signals:
-        socketio.emit("new_signal", sig)
-# -----------------------------
-
-if __name__ == "__main__":
-    logging.info("Starting Flask-SocketIO app on 0.0.0.0:5000")
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
