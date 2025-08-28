@@ -1,13 +1,11 @@
-import os
 import json
 import time
 import websocket
 from datetime import datetime
 from threading import Thread
 
-# We will inject socketio + mode from app.py instead of importing app directly
-socketio = None
-mode = None  
+# Flask socketio instance will be injected from app.py
+socketio = None  
 
 from credentials import POCKET_SESSION_TOKEN, POCKET_USER_ID, POCKET_ACCOUNT_URL
 
@@ -87,34 +85,28 @@ def on_error(ws, error):
 def run_ws():
     while True:  # 24/7 auto-reconnect
         try:
-            # Only run when LIVE mode is active
-            if mode and not mode.get("test_signals", True):
-                ws = websocket.WebSocketApp(
-                    POCKET_WS_URL,
-                    on_open=on_open,
-                    on_message=on_message,
-                    on_close=on_close,
-                    on_error=on_error,
-                    header=["Origin: https://m.pocketoption.com"]  # required header
-                )
-                ws.run_forever()
-            else:
-                print("[POCKET_WS] Skipping connection (TEST mode active).")
-                time.sleep(5)
+            ws = websocket.WebSocketApp(
+                POCKET_WS_URL,
+                on_open=on_open,
+                on_message=on_message,
+                on_close=on_close,
+                on_error=on_error,
+                header=["Origin: https://m.pocketoption.com"]  # required header
+            )
+            ws.run_forever()
         except Exception as e:
             print("[FATAL ERROR]", e)
         print("⏳ Reconnecting in 5 seconds...")
         time.sleep(5)
 
 
-def start_pocket_ws(sio, runtime_mode):
+def start_pocket_ws(sio):
     """
     Called from app.py to start PocketOption WS in background.
-    We inject socketio + mode dict to avoid circular imports.
+    We inject socketio only (no test/live toggle anymore).
     """
-    global socketio, mode
+    global socketio
     socketio = sio
-    mode = runtime_mode
 
     t = Thread(target=run_ws, daemon=True)
     t.start()
