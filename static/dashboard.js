@@ -1,8 +1,10 @@
 // static/dashboard.js
 
 document.addEventListener("DOMContentLoaded", () => {
-    const signalTableBody = document.querySelector("#signalTable tbody");
-    const lastUpdated = document.getElementById("lastUpdated");
+    const signalTableBody = document.querySelector("#signals-table tbody");
+    const lastUpdated = document.getElementById("last-update");
+    const toggle = document.getElementById("mode-toggle");
+    const label = document.getElementById("mode-label");
 
     // Function to fetch signals from backend
     async function fetchSignals() {
@@ -22,8 +24,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 row.appendChild(symbolCell);
 
                 const directionCell = document.createElement("td");
-                directionCell.textContent = signal.direction;
-                directionCell.classList.add(signal.direction.toLowerCase()); // color coding
+                directionCell.textContent = signal.direction || signal.signal;
+                directionCell.classList.add((signal.direction || signal.signal).toLowerCase());
                 row.appendChild(directionCell);
 
                 const timeframeCell = document.createElement("td");
@@ -33,6 +35,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 const timeCell = document.createElement("td");
                 timeCell.textContent = signal.time;
                 row.appendChild(timeCell);
+
+                const receivedCell = document.createElement("td");
+                receivedCell.textContent = new Date().toISOString().slice(0,19).replace("T"," ");
+                row.appendChild(receivedCell);
 
                 signalTableBody.appendChild(row);
             });
@@ -50,60 +56,39 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Auto-refresh every 60 seconds
     setInterval(fetchSignals, 60000);
-});
 
-<script>
-        const socket = io();
+    // Initialize dashboard state from backend
+    fetch("/signals_data")
+        .then(res => res.json())
+        .then(data => {
+            toggle.checked = (data.mode === "LIVE");
+            label.innerText = data.mode === "LIVE" ? "Live Mode" : "Test Mode";
+            lastUpdated.textContent = data.last_update;
+        });
 
-        // Initialize dashboard state from backend
-        fetch("/signals_data")
+    // Handle toggle click
+    toggle.addEventListener("change", function() {
+        fetch("/toggle_mode", {method: "POST"})
             .then(res => res.json())
             .then(data => {
-                const toggle = document.getElementById("mode-toggle");
-                const label = document.getElementById("mode-label");
-
-                toggle.checked = (data.mode === "LIVE");
                 label.innerText = data.mode === "LIVE" ? "Live Mode" : "Test Mode";
-
-                document.getElementById("last-update").innerText = data.last_update;
-
-                const table = document.getElementById('signals-table').getElementsByTagName('tbody')[0];
-                table.innerHTML = "";
-                data.signals.forEach(sig => {
-                    const row = table.insertRow();
-                    row.insertCell(0).innerText = sig.symbol;
-                    row.insertCell(1).innerText = sig.signal;
-                    row.insertCell(2).innerText = sig.time;
-                    row.insertCell(3).innerText = sig.timeframe;
-                    row.insertCell(4).innerText = new Date().toISOString().slice(0,19).replace("T"," ");
-                });
             });
+    });
 
-        // Handle toggle click
-        document.getElementById("mode-toggle").addEventListener("change", function() {
-            fetch("/toggle_mode", {method: "POST"})
-                .then(res => res.json())
-                .then(data => {
-                    document.getElementById("mode-label").innerText = 
-                        data.mode === "LIVE" ? "Live Mode" : "Test Mode";
-                });
-        });
+    // Socket.IO listener for new signals
+    const socket = io();
+    socket.on('new_signal', function(data) {
+        const row = signalTableBody.insertRow();
+        row.insertCell(0).innerText = data.symbol;
+        row.insertCell(1).innerText = data.signal;
+        row.insertCell(2).innerText = data.time;
+        row.insertCell(3).innerText = data.timeframe;
+        row.insertCell(4).innerText = new Date().toISOString().slice(0,19).replace("T"," ");
 
-        // Listen for new signals
-        socket.on('new_signal', function(data) {
-            const table = document.getElementById('signals-table').getElementsByTagName('tbody')[0];
+        lastUpdated.textContent = data.time;
 
-            const row = table.insertRow();
-            row.insertCell(0).innerText = data.symbol;
-            row.insertCell(1).innerText = data.signal;
-            row.insertCell(2).innerText = data.time;
-            row.insertCell(3).innerText = data.timeframe;
-            row.insertCell(4).innerText = new Date().toISOString().slice(0,19).replace("T"," ");
-
-            document.getElementById('last-update').innerText = data.time;
-
-            while(table.rows.length > 50){
-                table.deleteRow(0);
-            }
-        });
-    </script>
+        while(signalTableBody.rows.length > 50){
+            signalTableBody.deleteRow(0);
+        }
+    });
+});
