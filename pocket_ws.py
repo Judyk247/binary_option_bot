@@ -5,8 +5,9 @@ import websocket
 from datetime import datetime
 from threading import Thread
 
-# Import Flask socketio instance
-from app import socketio  # make sure socketio = SocketIO(app) exists in app.py
+# We will inject socketio + mode from app.py instead of importing app directly
+socketio = None
+mode = None  
 
 from credentials import POCKET_SESSION_TOKEN, POCKET_USER_ID, POCKET_ACCOUNT_URL
 
@@ -23,6 +24,7 @@ def on_open(ws):
 
 
 def on_message(ws, message):
+    global socketio
     if message.startswith("42"):
         try:
             data = json.loads(message[2:])
@@ -60,14 +62,15 @@ def on_message(ws, message):
 
                 print(f"[CANDLE] {symbol} {timeframe} Close={close_price} at {candle_time}")
 
-                # === Stub: emit a fake signal just to test dashboard ===
+                # === Stub: emit signal (later plug strategy logic here) ===
                 signal = {
                     "symbol": symbol,
-                    "signal": "BUY",   # later replace with strategy logic
+                    "signal": "BUY",   # placeholder
                     "timeframe": timeframe,
                     "time": candle_time
                 }
-                socketio.emit("new_signal", signal)
+                if socketio:
+                    socketio.emit("new_signal", signal)
 
         except Exception as e:
             print("[ERROR parsing message]", e)
@@ -84,26 +87,38 @@ def on_error(ws, error):
 def run_ws():
     while True:  # 24/7 auto-reconnect
         try:
-            ws = websocket.WebSocketApp(
-                POCKET_WS_URL,
-                on_open=on_open,
-                on_message=on_message,
-                on_close=on_close,
-                on_error=on_error,
-                header=["Origin: https://m.pocketoption.com"]  # important header
-            )
-            ws.run_forever()
+            # Only run when LIVE mode is active
+            if mode and not mode.get("test_signals", True):
+                ws = websocket.WebSocketApp(
+                    POCKET_WS_URL,
+                    on_open=on_open,
+                    on_message=on_message,
+                    on_close=on_close,
+                    on_error=on_error,
+                    header=["Origin: https://m.pocketoption.com"]  # required header
+                )
+                ws.run_forever()
+            else:
+                print("[POCKET_WS] Skipping connection (TEST mode active).")
+                time.sleep(5)
         except Exception as e:
             print("[FATAL ERROR]", e)
         print("⏳ Reconnecting in 5 seconds...")
         time.sleep(5)
 
 
-# Run as background thread inside Flask app
-def start_pocket_ws():
+def start_pocket_ws(sio, runtime_mode):
+    """
+    Called from app.py to start PocketOption WS in background.
+    We inject socketio + mode dict to avoid circular imports.
+    """
+    global socketio, mode
+    socketio = sio
+    mode = runtime_mode
+
     t = Thread(target=run_ws, daemon=True)
     t.start()
 
 
 if __name__ == "__main__":
-    run_ws()
+    print("⚠️ Run this only from app.py, not directly.")
