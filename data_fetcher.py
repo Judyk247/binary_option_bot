@@ -1,4 +1,3 @@
-# data_fetcher.py
 import json
 import time
 import websocket
@@ -21,6 +20,15 @@ POCKET_WS_URL = "wss://chat-po.site/cabinet-client/socket.io/?EIO=4&transport=we
 
 # Keep track of last heartbeat time
 last_heartbeat = 0
+
+# --- Hardcoded fallback: 30 most popular Forex pairs ---
+DEFAULT_SYMBOLS = [
+    "EUR/USD", "GBP/USD", "USD/JPY", "USD/CHF", "AUD/USD", "NZD/USD",
+    "USD/CAD", "EUR/GBP", "EUR/JPY", "GBP/JPY", "AUD/JPY", "NZD/JPY",
+    "EUR/AUD", "EUR/NZD", "EUR/CAD", "EUR/CHF", "GBP/AUD", "GBP/NZD",
+    "GBP/CAD", "GBP/CHF", "AUD/NZD", "AUD/CAD", "AUD/CHF", "NZD/CAD",
+    "NZD/CHF", "CAD/CHF", "CAD/JPY", "CHF/JPY", "EUR/SEK", "EUR/NOK"
+]
 
 def send_heartbeat(ws):
     global last_heartbeat
@@ -51,6 +59,11 @@ def on_message(ws, message):
                 print("[RECV] Assets list received ")
                 assets = [a["symbol"] for a in payload if a.get("enabled")]
                 print(f"[DEBUG] Assets enabled: {assets[:5]} ... ({len(assets)} total)")
+
+                # If no assets received, fall back to hardcoded list
+                if not assets:
+                    print("[FALLBACK] Using hardcoded default symbols")
+                    assets = DEFAULT_SYMBOLS
 
                 # Subscribe to ticks and candles
                 for asset in assets:
@@ -118,7 +131,7 @@ def start_fetching(symbols, timeframes, socketio, latest_signals):
     analyze signals, update latest_signals list, and emit to dashboard via socketio.
     """
     while True:
-        for symbol in symbols:
+        for symbol in (symbols or DEFAULT_SYMBOLS):
             for tf in timeframes:
                 candles = market_data[symbol]["candles"].get(tf_to_seconds(tf), [])
                 if not candles:
@@ -134,7 +147,6 @@ def start_fetching(symbols, timeframes, socketio, latest_signals):
                 }
 
                 # Update latest_signals list for dashboard
-                # Remove previous signal for same symbol+tf if exists
                 latest_signals[:] = [s for s in latest_signals if not (s["symbol"] == symbol and s["timeframe"] == tf)]
                 latest_signals.append(signal_data)
 
@@ -151,6 +163,7 @@ def start_fetching(symbols, timeframes, socketio, latest_signals):
                                 print("[TELEGRAM ERROR]", e)
 
         time.sleep(5)  # Check every 5 seconds
+
 def tf_to_seconds(tf):
     """Convert string timeframe (1m, 2m, 3m, 5m) to seconds"""
     return int(tf[:-1]) * 60
