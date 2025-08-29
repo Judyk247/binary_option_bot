@@ -7,7 +7,7 @@ from threading import Thread
 # Flask socketio instance will be injected from app.py
 socketio = None  
 
-from credentials import POCKET_SESSION_TOKEN, POCKET_USER_ID, POCKET_ACCOUNT_URL
+from credentials import POCKET_USER_ID, POCKET_SECRET
 
 POCKET_WS_URL = "wss://chat-po.site/cabinet-client/socket.io/?EIO=4&transport=websocket"
 
@@ -15,10 +15,10 @@ POCKET_WS_URL = "wss://chat-po.site/cabinet-client/socket.io/?EIO=4&transport=we
 def on_open(ws):
     print("[OPEN] Connected to Pocket Option WebSocket")
 
-    # Send authentication
-    auth_msg = f'42["auth",{{"sessionToken":"{POCKET_SESSION_TOKEN}","uid":"{POCKET_USER_ID}","lang":"en","currentUrl":"{POCKET_ACCOUNT_URL}","isChart":1}}]'
+    # Send user_init authentication (id + secret)
+    auth_msg = f'42["user_init",{{"id":{POCKET_USER_ID},"secret":"{POCKET_SECRET}"}}]'
     ws.send(auth_msg)
-    print("[SEND] Auth message sent ✅")
+    print("[SEND] user_init message sent ✅")
 
 
 def on_message(ws, message):
@@ -29,8 +29,8 @@ def on_message(ws, message):
             event = data[0]
             payload = data[1] if len(data) > 1 else None
 
-            if event == "auth_success":
-                print("[AUTH] Authentication successful ✅")
+            if event in ["user_init", "user_data"]:
+                print(f"[AUTH] Authentication successful ✅ Event={event}")
 
                 # Request full asset list dynamically
                 ws.send('42["getAssets", {}]')
@@ -57,7 +57,6 @@ def on_message(ws, message):
                 tick_time = datetime.utcfromtimestamp(payload["time"]).strftime("%Y-%m-%d %H:%M:%S")
                 print(f"[TICK] {symbol}: {price} at {tick_time}")
 
-                # Forward tick to bot (bot will aggregate into timeframes)
                 tick_data = {
                     "symbol": symbol,
                     "price": price,
@@ -65,6 +64,9 @@ def on_message(ws, message):
                 }
                 if socketio:
                     socketio.emit("new_tick", tick_data)
+
+            else:
+                print("[DEBUG] Unhandled event:", event, payload)
 
         except Exception as e:
             print("[ERROR parsing message]", e)
@@ -97,10 +99,7 @@ def run_ws():
 
 
 def start_pocket_ws(sio):
-    """
-    Called from app.py to start PocketOption WS in background.
-    We inject socketio only (no test/live toggle anymore).
-    """
+    """Called from app.py to start PocketOption WS in background."""
     global socketio
     socketio = sio
 
