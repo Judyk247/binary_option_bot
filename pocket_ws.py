@@ -34,25 +34,31 @@ def on_open(ws):
     t = Thread(target=send_keepalive, args=(ws,), daemon=True)
     t.start()
 
+    # Step 1: open namespace first
+    ws.send("40")  
+    print("[SEND] Namespace open (40) ✅")
+
     # Small delay before sending authentication (to avoid "too early" issue)
     time.sleep(1)
 
-    # Send user_init authentication (id + sessionToken + extra info)
+    # Step 2: Send user_init authentication (id + sessionToken + extra info)
     auth_payload = {
         "id": int(POCKET_USER_ID),
-        "secret": POCKET_SESSION_TOKEN,
+        "sessionToken": POCKET_SESSION_TOKEN,   # <-- use sessionToken here
+        "uid": str(POCKET_USER_ID),             # Pocket also expects uid field
         "lang": "en",
-        "currentUrl": "cabinet/real-quick-high-low",
+        "currentUrl": "cabinet/real-quick-high-low",  # or demo-quick-high-low
         "isChart": 1
     }
     auth_msg = f'42["user_init",{json.dumps(auth_payload)}]'
     ws.send(auth_msg)
     print("[SEND] user_init message sent ✅")
 
-    # Delay again before requesting assets (to let auth settle)
+    # Step 3: Delay again before requesting assets (to let auth settle)
     time.sleep(1)
     ws.send('42["getAssets", {}]')
     print("[SEND] Requested assets list (after reconnect)")
+
 
 def on_message(ws, message):
     global socketio
@@ -95,8 +101,13 @@ def on_message(ws, message):
                 payload = data[1] if len(data) > 1 else None
                 print(f"[EVENT] {event} | Payload: {payload}")
 
-                if event in ["user_init", "user_data"]:
-                    print(f"[AUTH] Authentication successful ✅ Event={event}")
+                if event == "user_init":
+                    print(f"[AUTH-STEP1] Server acknowledged user_init ✅ Payload={payload}")
+
+                elif event == "user_data":
+                    print(f"[AUTH-STEP2] Authentication confirmed 🎉 User data received")
+                    print(f"   UID: {payload.get('uid')}, Balance: {payload.get('balance')}")
+                    # Once authenticated, request asset list
                     ws.send('42["getAssets", {}]')
                     print("[SEND] Requested assets list from PocketOption")
 
@@ -134,6 +145,7 @@ def on_message(ws, message):
 
     except Exception as e:
         print("[ERROR parsing message]", e)
+
 
 def on_close(ws, close_status_code, close_msg):
     print("[CLOSE] Connection closed:", close_status_code, close_msg)
