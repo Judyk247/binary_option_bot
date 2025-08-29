@@ -11,15 +11,6 @@ from credentials import POCKET_SESSION_TOKEN, POCKET_USER_ID, POCKET_ACCOUNT_URL
 
 POCKET_WS_URL = "wss://chat-po.site/cabinet-client/socket.io/?EIO=4&transport=websocket"
 
-# Hardcoded default forex pairs (no crypto, no stocks)
-DEFAULT_SYMBOLS = [
-    "EUR/USD", "GBP/USD", "USD/JPY", "USD/CHF", "AUD/USD", "NZD/USD",
-    "USD/CAD", "EUR/GBP", "EUR/JPY", "GBP/JPY", "AUD/JPY", "NZD/JPY",
-    "EUR/AUD", "EUR/NZD", "EUR/CAD", "EUR/CHF", "GBP/AUD", "GBP/NZD",
-    "GBP/CAD", "GBP/CHF", "AUD/NZD", "AUD/CAD", "AUD/CHF", "NZD/CAD",
-    "NZD/CHF", "CAD/CHF", "CAD/JPY", "CHF/JPY", "EUR/SEK", "EUR/NOK"
-]
-
 
 def on_open(ws):
     print("[OPEN] Connected to Pocket Option WebSocket")
@@ -41,10 +32,23 @@ def on_message(ws, message):
             if event == "auth_success":
                 print("[AUTH] Authentication successful ✅")
 
-                # Subscribe only to default forex pairs (ticks only)
-                for asset in DEFAULT_SYMBOLS:
+                # Request full asset list dynamically
+                ws.send('42["getAssets", {}]')
+                print("[SEND] Requested assets list from PocketOption")
+
+            elif event == "assets":
+                print("[RECV] Assets list received ✅")
+
+                # Filter only enabled forex assets
+                assets = [
+                    a["symbol"] for a in payload
+                    if a.get("enabled") and a.get("type") == "forex"
+                ]
+
+                # Subscribe dynamically to ticks for all forex pairs
+                for asset in assets:
                     ws.send(f'42["subscribe",{{"type":"ticks","asset":"{asset}"}}]')
-                print(f"[SUBSCRIBE] Subscribed to {len(DEFAULT_SYMBOLS)} forex pairs 🔥")
+                print(f"[SUBSCRIBE] Subscribed to {len(assets)} forex pairs 🔥")
 
             elif event == "ticks":
                 # Handle ticks data
@@ -53,7 +57,7 @@ def on_message(ws, message):
                 tick_time = datetime.utcfromtimestamp(payload["time"]).strftime("%Y-%m-%d %H:%M:%S")
                 print(f"[TICK] {symbol}: {price} at {tick_time}")
 
-                # === Stub: Forward tick to bot (bot will aggregate into timeframes) ===
+                # Forward tick to bot (bot will aggregate into timeframes)
                 tick_data = {
                     "symbol": symbol,
                     "price": price,
