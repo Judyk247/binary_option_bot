@@ -11,18 +11,48 @@ from credentials import POCKET_USER_ID, POCKET_SESSION_TOKEN
 
 POCKET_WS_URL = "wss://chat-po.site/cabinet-client/socket.io/?EIO=4&transport=websocket"
 
+# Keep track of subscribed assets for auto-resubscribe
+subscribed_assets = []
+
+
+def send_keepalive(ws):
+    """Keep-alive ping loop (prevents server disconnect)."""
+    while True:
+        try:
+            ws.send("2")  # Engine.IO ping
+            print("[PING] Keep-alive sent")
+        except Exception as e:
+            print("[PING ERROR]", e)
+            break
+        time.sleep(20)  # send ping every 20s
+
 
 def on_open(ws):
     print("[OPEN] Connected to Pocket Option WebSocket")
 
-    # Send user_init authentication (id + secret)
-    auth_msg = f'42["user_init",{{"id":{POCKET_USER_ID},"secret":"{POCKET_SESSION_TOKEN}"}}]'
+    # Send user_init authentication (id + sessionToken + extra info)
+    auth_payload = {
+        "id": int(POCKET_USER_ID),
+        "secret": POCKET_SESSION_TOKEN,
+        "lang": "en",
+        "currentUrl": "cabinet/real-quick-high-low",
+        "isChart": 1
+    }
+    auth_msg = f'42["user_init",{json.dumps(auth_payload)}]'
     ws.send(auth_msg)
     print("[SEND] user_init message sent ✅")
 
+    # Start keep-alive thread
+    t = Thread(target=send_keepalive, args=(ws,), daemon=True)
+    t.start()
+
+    # Request assets again (for auto-resubscribe after reconnect)
+    ws.send('42["getAssets", {}]')
+    print("[SEND] Requested assets list (after reconnect)")
+
 
 def on_message(ws, message):
-    global socketio
+    global socketio, subscribed_assets
     if message.startswith("42"):
         try:
             data = json.loads(message[2:])
@@ -40,15 +70,15 @@ def on_message(ws, message):
                 print("[RECV] Assets list received ✅")
 
                 # Filter only enabled forex assets
-                assets = [
+                subscribed_assets = [
                     a["symbol"] for a in payload
                     if a.get("enabled") and a.get("type") == "forex"
                 ]
 
                 # Subscribe dynamically to ticks for all forex pairs
-                for asset in assets:
+                for asset in subscribed_assets:
                     ws.send(f'42["subscribe",{{"type":"ticks","asset":"{asset}"}}]')
-                print(f"[SUBSCRIBE] Subscribed to {len(assets)} forex pairs 🔥")
+                print(f"[SUBSCRIBE] Subscribed to {len(subscribed_assets)} forex pairs 🔥")
 
             elif event == "ticks":
                 # Handle ticks data
