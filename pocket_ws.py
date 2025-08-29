@@ -103,13 +103,17 @@ def on_message(ws, message):
             else:
                 print("[DEBUG] Unhandled event:", event, payload)
 
+        elif message == "2":
+            # Server sent a ping → respond with pong
+            print("[PING] Received ping → sending pong (3)")
+            ws.send("3")
+
         else:
-            # Not a "42" message → could be ping/pong/heartbeat
+            # Other control/handshake messages
             print(f"[HEARTBEAT/CTRL] {message}")
 
     except Exception as e:
         print("[ERROR parsing message]", e)
-
 
 def on_close(ws, close_status_code, close_msg):
     print("[CLOSE] Connection closed:", close_status_code, close_msg)
