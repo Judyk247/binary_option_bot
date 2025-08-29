@@ -53,11 +53,13 @@ def on_open(ws):
 
 def on_message(ws, message):
     global socketio
-    if message.startswith("42"):
-        try:
-            # Print raw WebSocket message for debugging
-            print(f"[RAW] {message}")
 
+    # Always log raw message (including heartbeats, pings, etc.)
+    print(f"[RAW] {message}")
+
+    try:
+        # Handle Socket.IO messages that start with "42"
+        if message.startswith("42"):
             data = json.loads(message[2:])
             event = data[0]
             payload = data[1] if len(data) > 1 else None
@@ -101,8 +103,12 @@ def on_message(ws, message):
             else:
                 print("[DEBUG] Unhandled event:", event, payload)
 
-        except Exception as e:
-            print("[ERROR parsing message]", e)
+        else:
+            # Not a "42" message → could be ping/pong/heartbeat
+            print(f"[HEARTBEAT/CTRL] {message}")
+
+    except Exception as e:
+        print("[ERROR parsing message]", e)
 
 
 def on_close(ws, close_status_code, close_msg):
