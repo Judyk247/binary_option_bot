@@ -30,6 +30,13 @@ def send_keepalive(ws):
 def on_open(ws):
     print("[OPEN] Connected to Pocket Option WebSocket")
 
+    # Start keep-alive thread immediately (so connection stays alive)
+    t = Thread(target=send_keepalive, args=(ws,), daemon=True)
+    t.start()
+
+    # Small delay before sending authentication (to avoid "too early" issue)
+    time.sleep(1)
+
     # Send user_init authentication (id + sessionToken + extra info)
     auth_payload = {
         "id": int(POCKET_USER_ID),
@@ -42,35 +49,43 @@ def on_open(ws):
     ws.send(auth_msg)
     print("[SEND] user_init message sent ✅")
 
-    # Start keep-alive thread
-    t = Thread(target=send_keepalive, args=(ws,), daemon=True)
-    t.start()
-
-    # Request assets again (for auto-resubscribe after reconnect)
+    # Delay again before requesting assets (to let auth settle)
+    time.sleep(1)
     ws.send('42["getAssets", {}]')
     print("[SEND] Requested assets list (after reconnect)")
-
 
 def on_message(ws, message):
     global socketio
 
-    # Always log raw message (including heartbeats, pings, etc.)
+    # Always log raw message
     print(f"[RAW] {message}")
 
     try:
         # ---- Socket.IO handshake ----
         if message.startswith("0{"):
-            # This is the initial handshake (sid, pingInterval, etc.)
             print("[HANDSHAKE] Received Socket.IO handshake ✅")
-            # Send "40" to open the default namespace
-            ws.send("40")
+            ws.send("40")  # open default namespace
             print("[SEND] Sent '40' (open namespace)")
+
+        # ---- Namespace opened ----
+        elif message == "40":
+            print("[NAMESPACE] Default namespace opened ✅")
+            # Send user_init immediately after namespace is open
+            ws.send(json.dumps(["user_init", {
+                "session": POCKET_SESSION_TOKEN,
+                "uid": POCKET_UID,
+                "lang": "en"
+            }]).replace("[", '42[', 1))
+            print("[SEND] user_init message sent ✅")
 
         # ---- Server ping ----
         elif message == "2":
-            # Respond with "3" (pong)
             print("[PING] Received ping → sending pong (3)")
             ws.send("3")
+
+        # ---- Server disconnect ----
+        elif message == "41":
+            print("[DISCONNECT] Server closed namespace ❌")
 
         # ---- Socket.IO event messages ----
         elif message.startswith("42"):
@@ -87,12 +102,10 @@ def on_message(ws, message):
 
                 elif event == "assets":
                     print("[RECV] Assets list received ✅")
-                    # Filter only enabled forex assets
                     assets = [
                         a["symbol"] for a in payload
                         if a.get("enabled") and a.get("type") == "forex"
                     ]
-                    # Subscribe dynamically to ticks for all forex pairs
                     for asset in assets:
                         ws.send(f'42["subscribe",{{"type":"ticks","asset":"{asset}"}}]')
                     print(f"[SUBSCRIBE] Subscribed to {len(assets)} forex pairs 🔥")
@@ -100,14 +113,12 @@ def on_message(ws, message):
                 elif event == "ticks":
                     symbol = payload.get("asset")
                     price = payload.get("price")
-                    tick_time = datetime.utcfromtimestamp(payload["time"]).strftime("%Y-%m-%d %H:%M:%S")
+                    tick_time = datetime.utcfromtimestamp(
+                        payload["time"]
+                    ).strftime("%Y-%m-%d %H:%M:%S")
                     print(f"[TICK] {symbol}: {price} at {tick_time}")
 
-                    tick_data = {
-                        "symbol": symbol,
-                        "price": price,
-                        "time": tick_time
-                    }
+                    tick_data = {"symbol": symbol, "price": price, "time": tick_time}
                     if socketio:
                         socketio.emit("new_tick", tick_data)
 
@@ -118,7 +129,7 @@ def on_message(ws, message):
                 print("[ERROR decoding event]", e)
 
         else:
-            # Unknown but log anyway
+            # Unknown control message
             print(f"[CTRL/OTHER] {message}")
 
     except Exception as e:
