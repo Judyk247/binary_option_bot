@@ -52,9 +52,12 @@ def on_open(ws):
 
 
 def on_message(ws, message):
-    global socketio, subscribed_assets
+    global socketio
     if message.startswith("42"):
         try:
+            # Print raw WebSocket message for debugging
+            print(f"[RAW] {message}")
+
             data = json.loads(message[2:])
             event = data[0]
             payload = data[1] if len(data) > 1 else None
@@ -70,15 +73,15 @@ def on_message(ws, message):
                 print("[RECV] Assets list received ✅")
 
                 # Filter only enabled forex assets
-                subscribed_assets = [
+                assets = [
                     a["symbol"] for a in payload
                     if a.get("enabled") and a.get("type") == "forex"
                 ]
 
                 # Subscribe dynamically to ticks for all forex pairs
-                for asset in subscribed_assets:
+                for asset in assets:
                     ws.send(f'42["subscribe",{{"type":"ticks","asset":"{asset}"}}]')
-                print(f"[SUBSCRIBE] Subscribed to {len(subscribed_assets)} forex pairs 🔥")
+                print(f"[SUBSCRIBE] Subscribed to {len(assets)} forex pairs 🔥")
 
             elif event == "ticks":
                 # Handle ticks data
