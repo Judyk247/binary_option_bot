@@ -58,59 +58,68 @@ def on_message(ws, message):
     print(f"[RAW] {message}")
 
     try:
-        # Handle Socket.IO messages that start with "42"
-        if message.startswith("42"):
-            data = json.loads(message[2:])
-            event = data[0]
-            payload = data[1] if len(data) > 1 else None
+        # ---- Socket.IO handshake ----
+        if message.startswith("0{"):
+            # This is the initial handshake (sid, pingInterval, etc.)
+            print("[HANDSHAKE] Received Socket.IO handshake ✅")
+            # Send "40" to open the default namespace
+            ws.send("40")
+            print("[SEND] Sent '40' (open namespace)")
 
-            if event in ["user_init", "user_data"]:
-                print(f"[AUTH] Authentication successful ✅ Event={event}")
-
-                # Request full asset list dynamically
-                ws.send('42["getAssets", {}]')
-                print("[SEND] Requested assets list from PocketOption")
-
-            elif event == "assets":
-                print("[RECV] Assets list received ✅")
-
-                # Filter only enabled forex assets
-                assets = [
-                    a["symbol"] for a in payload
-                    if a.get("enabled") and a.get("type") == "forex"
-                ]
-
-                # Subscribe dynamically to ticks for all forex pairs
-                for asset in assets:
-                    ws.send(f'42["subscribe",{{"type":"ticks","asset":"{asset}"}}]')
-                print(f"[SUBSCRIBE] Subscribed to {len(assets)} forex pairs 🔥")
-
-            elif event == "ticks":
-                # Handle ticks data
-                symbol = payload.get("asset")
-                price = payload.get("price")
-                tick_time = datetime.utcfromtimestamp(payload["time"]).strftime("%Y-%m-%d %H:%M:%S")
-                print(f"[TICK] {symbol}: {price} at {tick_time}")
-
-                tick_data = {
-                    "symbol": symbol,
-                    "price": price,
-                    "time": tick_time
-                }
-                if socketio:
-                    socketio.emit("new_tick", tick_data)
-
-            else:
-                print("[DEBUG] Unhandled event:", event, payload)
-
+        # ---- Server ping ----
         elif message == "2":
-            # Server sent a ping → respond with pong
+            # Respond with "3" (pong)
             print("[PING] Received ping → sending pong (3)")
             ws.send("3")
 
+        # ---- Socket.IO event messages ----
+        elif message.startswith("42"):
+            try:
+                data = json.loads(message[2:])
+                event = data[0]
+                payload = data[1] if len(data) > 1 else None
+                print(f"[EVENT] {event} | Payload: {payload}")
+
+                if event in ["user_init", "user_data"]:
+                    print(f"[AUTH] Authentication successful ✅ Event={event}")
+                    ws.send('42["getAssets", {}]')
+                    print("[SEND] Requested assets list from PocketOption")
+
+                elif event == "assets":
+                    print("[RECV] Assets list received ✅")
+                    # Filter only enabled forex assets
+                    assets = [
+                        a["symbol"] for a in payload
+                        if a.get("enabled") and a.get("type") == "forex"
+                    ]
+                    # Subscribe dynamically to ticks for all forex pairs
+                    for asset in assets:
+                        ws.send(f'42["subscribe",{{"type":"ticks","asset":"{asset}"}}]')
+                    print(f"[SUBSCRIBE] Subscribed to {len(assets)} forex pairs 🔥")
+
+                elif event == "ticks":
+                    symbol = payload.get("asset")
+                    price = payload.get("price")
+                    tick_time = datetime.utcfromtimestamp(payload["time"]).strftime("%Y-%m-%d %H:%M:%S")
+                    print(f"[TICK] {symbol}: {price} at {tick_time}")
+
+                    tick_data = {
+                        "symbol": symbol,
+                        "price": price,
+                        "time": tick_time
+                    }
+                    if socketio:
+                        socketio.emit("new_tick", tick_data)
+
+                else:
+                    print("[DEBUG] Unhandled event:", event, payload)
+
+            except Exception as e:
+                print("[ERROR decoding event]", e)
+
         else:
-            # Other control/handshake messages
-            print(f"[HEARTBEAT/CTRL] {message}")
+            # Unknown but log anyway
+            print(f"[CTRL/OTHER] {message}")
 
     except Exception as e:
         print("[ERROR parsing message]", e)
