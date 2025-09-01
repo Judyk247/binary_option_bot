@@ -59,7 +59,13 @@ def dashboard():
 def signals_data():
     """Return latest signals as JSON for AJAX polling."""
     signals_out = latest_signals if latest_signals else [
-        {"symbol": "-", "signal": "No signals yet", "time": "-", "timeframe": "-"}
+        {
+            "symbol": "-",
+            "signal": "No signals yet",
+            "confidence": 0,
+            "time": "-",
+            "timeframe": "-"
+        }
     ]
     return jsonify({
         "last_update": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
