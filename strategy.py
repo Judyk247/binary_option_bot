@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 
 def calculate_ema(prices, period):
-    """Calculate EMA for a list of prices"""
     emas = []
     k = 2 / (period + 1)
     for i, price in enumerate(prices):
@@ -14,7 +13,6 @@ def calculate_ema(prices, period):
     return emas
 
 def heikin_ashi(df):
-    """Convert OHLC to Heikin Ashi candles"""
     ha_df = df.copy()
     ha_df['close'] = (df['open'] + df['high'] + df['low'] + df['close']) / 4
     ha_df['open'] = (df['open'].shift(1) + df['close'].shift(1)) / 2
@@ -24,7 +22,6 @@ def heikin_ashi(df):
     return ha_df
 
 def calculate_atr(df, period=14):
-    """Average True Range"""
     high_low = df['high'] - df['low']
     high_close = np.abs(df['high'] - df['close'].shift(1))
     low_close = np.abs(df['low'] - df['close'].shift(1))
@@ -33,7 +30,6 @@ def calculate_atr(df, period=14):
     return atr
 
 def calculate_alligator(df, jaw=13, teeth=8, lips=5):
-    """Alligator lines using SMAs of median price"""
     median_price = (df['high'] + df['low']) / 2
     jaw_line = median_price.rolling(jaw).mean()
     teeth_line = median_price.rolling(teeth).mean()
@@ -41,7 +37,6 @@ def calculate_alligator(df, jaw=13, teeth=8, lips=5):
     return jaw_line, teeth_line, lips_line
 
 def stochastic_oscillator(df, k_period=14, d_period=3):
-    """Stochastic %K and %D"""
     low_min = df['low'].rolling(k_period).min()
     high_max = df['high'].rolling(k_period).max()
     k = 100 * (df['close'] - low_min) / (high_max - low_min)
@@ -62,9 +57,41 @@ def detect_bearish_engulfing(df):
     return last['close'] < last['open'] and prev['close'] > prev['open'] \
            and last['open'] > prev['close'] and last['close'] < prev['open']
 
-def analyze_candles(df, debug=False):
-    """Return 'buy', 'sell', or None signal"""
-    if len(df) < 30:
+# --- Multi-Timeframe Confirmation ---
+def multi_timeframe_confirmation(lower_signal, mid_df, high_df):
+    """
+    lower_signal = signal from 1m
+    mid_df = 3m candles (must agree with 1m)
+    high_df = 5m candles (filter, must not oppose)
+    """
+    if lower_signal is None:
+        return None
+
+    def get_bias(df):
+        if df is None or len(df) < 50:
+            return None, 0
+        ha = heikin_ashi(df)
+        ema = ha['close'].ewm(span=100, adjust=False).mean()
+        ema_slope = ema.iloc[-1] - ema.iloc[-5]
+        bullish = ha['close'].mean() > ha['open'].mean()
+        bearish = ha['close'].mean() < ha['open'].mean()
+        return ("bullish" if ema_slope > 0 and bullish else
+                "bearish" if ema_slope < 0 and bearish else None), ema_slope
+
+    mid_bias, _ = get_bias(mid_df)
+    high_bias, _ = get_bias(high_df)
+
+    # 1m Buy needs 3m bullish, and 5m not bearish
+    if lower_signal == "buy" and mid_bias == "bullish" and high_bias != "bearish":
+        return "buy"
+    # 1m Sell needs 3m bearish, and 5m not bullish
+    elif lower_signal == "sell" and mid_bias == "bearish" and high_bias != "bullish":
+        return "sell"
+    else:
+        return None
+
+def analyze_candles(df, mid_df=None, high_df=None, debug=False):
+    if len(df) < 50:
         if debug:
             print("Not enough candles: have", len(df))
         return None
@@ -82,15 +109,27 @@ def analyze_candles(df, debug=False):
     bullish_pattern = detect_bullish_engulfing(recent)
     bearish_pattern = detect_bearish_engulfing(recent)
 
+    ema_slope = ema.iloc[-1] - ema.iloc[-5]
+    min_atr = atr.iloc[last_idx] > df['close'].mean() * 0.001
+    last_candle = ha_df.iloc[last_idx]
+    body = abs(last_candle['close'] - last_candle['open'])
+    upper_wick = last_candle['high'] - max(last_candle['close'], last_candle['open'])
+    lower_wick = min(last_candle['close'], last_candle['open']) - last_candle['low']
+
+    momentum_bull = (ha_df['close'].iloc[-3:] > ha_df['open'].iloc[-3:]).sum() >= 2
+    momentum_bear = (ha_df['close'].iloc[-3:] < ha_df['open'].iloc[-3:]).sum() >= 2
+
     is_buy = (
         ha_df['close'].iloc[last_idx] > jaw.iloc[last_idx] and
         ha_df['close'].iloc[last_idx] > teeth.iloc[last_idx] and
         ha_df['close'].iloc[last_idx] > lips.iloc[last_idx] and
         k.iloc[last_idx] > d.iloc[last_idx] and
         k.iloc[last_idx] < 30 and
-        bullish_bias and
-        bullish_pattern and
-        atr.iloc[last_idx] > 0
+        bullish_bias and bullish_pattern and
+        atr.iloc[last_idx] > 0 and
+        ema_slope > 0 and min_atr and
+        momentum_bull and
+        upper_wick < body * 0.5
     )
 
     is_sell = (
@@ -99,24 +138,18 @@ def analyze_candles(df, debug=False):
         ha_df['close'].iloc[last_idx] < lips.iloc[last_idx] and
         k.iloc[last_idx] < d.iloc[last_idx] and
         k.iloc[last_idx] > 80 and
-        bearish_bias and
-        bearish_pattern and
-        atr.iloc[last_idx] > 0
+        bearish_bias and bearish_pattern and
+        atr.iloc[last_idx] > 0 and
+        ema_slope < 0 and min_atr and
+        momentum_bear and
+        lower_wick < body * 0.5
     )
+
+    raw_signal = "buy" if is_buy else "sell" if is_sell else None
+    confirmed = multi_timeframe_confirmation(raw_signal, mid_df, high_df)
 
     if debug:
         print("--- Candle Analysis Debug ---")
-        print("Close:", ha_df['close'].iloc[last_idx])
-        print("Jaw:", jaw.iloc[last_idx], "Teeth:", teeth.iloc[last_idx], "Lips:", lips.iloc[last_idx])
-        print("Stoch K:", k.iloc[last_idx], "D:", d.iloc[last_idx])
-        print("Bullish Bias:", bullish_bias, "Bearish Bias:", bearish_bias)
-        print("Bullish Engulfing:", bullish_pattern, "Bearish Engulfing:", bearish_pattern)
-        print("ATR:", atr.iloc[last_idx])
-        print("BUY:", is_buy, "SELL:", is_sell)
+        print("Raw Signal:", raw_signal, "Confirmed:", confirmed)
 
-    if is_buy:
-        return "buy"
-    elif is_sell:
-        return "sell"
-    else:
-        return None
+    return confirmed
