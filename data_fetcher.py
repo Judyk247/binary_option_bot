@@ -46,7 +46,7 @@ def on_open(ws):
     print("[OPEN] Connected to Pocket Option WebSocket")
 
     # Authenticate
-    auth_msg = f'42["auth",{{"sessionToken":"{SECRET}","uid":"{ID}","lang":"en","currentUrl":"{ACCOUNT_URL}","isChart":1}}]'
+    auth_msg = f'42["auth",{{"sessionToken":"{sessionToken}","uid":"{uid}","lang":"en","currentUrl"cabinet","isChart":1}}]'
     ws.send(auth_msg)
     print("[SEND] Auth message sent ")
 
