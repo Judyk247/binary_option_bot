@@ -139,11 +139,19 @@ def start_fetching(symbols, timeframes, socketio, latest_signals):
                 if not candles:
                     continue
                 df = pd.DataFrame(candles)
-                # Run your strategy
-                signal = analyze_candles(df)
+                # Run your strategy (expects analyze_candles to return tuple: signal, confidence)
+                result = analyze_candles(df)
+                
+                if isinstance(result, tuple):
+                    signal_value, confidence = result
+                else:
+                    signal_value = result
+                    confidence = 100  # fallback default
+
                 signal_data = {
                     "symbol": symbol,
-                    "signal": signal if signal else "HOLD",
+                    "signal": signal_value if signal_value else "HOLD",
+                    "confidence": confidence,  # <-- added
                     "time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
                     "timeframe": tf
                 }
@@ -156,11 +164,11 @@ def start_fetching(symbols, timeframes, socketio, latest_signals):
                 socketio.emit("new_signal", signal_data)
 
                 # Send Telegram alert only if there is a BUY/SELL signal
-                if signal in ["BUY", "SELL"]:
+                if signal_value in ["BUY", "SELL"]:
                     for chat_id in TELEGRAM_CHAT_IDS:
                         if chat_id:
                             try:
-                                send_telegram_message(chat_id, f"{symbol} {tf} signal: {signal}")
+                                send_telegram_message(chat_id, f"{symbol} {tf} signal: {signal_value} ({confidence}%)")
                             except Exception as e:
                                 print("[TELEGRAM ERROR]", e)
 
