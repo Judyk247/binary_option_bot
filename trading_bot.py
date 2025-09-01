@@ -13,7 +13,7 @@ from strategy import (
 )
 
 # Timeframes in seconds
-TIMEFRAMES = [60, 120, 180, 300]  # 1m, 2m, 3m, 5m
+TIMEFRAMES = [60, 180, 300]  # 1m, 3m, 5m
 
 # Minimum number of candles to analyze
 HISTORICAL_CANDLES = 50
