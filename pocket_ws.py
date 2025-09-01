@@ -4,18 +4,15 @@ import websocket
 from datetime import datetime
 from threading import Thread
 from config import SYMBOLS, market_data, TIMEFRAMES, DEBUG
+from credentials import uid, sessionToken, ACCOUNT_URL
 
 # Flask socketio instance will be injected from app.py
 socketio = None  
 
-# Pocket Option WebSocket URL
 POCKET_WS_URL = "wss://chat-po.site/cabinet-client/socket.io/?EIO=4&transport=websocket"
 
-# Credentials
-from credentials import uid, sessionToken, ACCOUNT_URL
-
 def send_keepalive(ws):
-    """Send periodic ping to keep WebSocket alive."""
+    """Keep-alive ping loop (prevents server disconnect)."""
     while True:
         try:
             ws.send("2")  # Engine.IO ping
@@ -24,17 +21,17 @@ def send_keepalive(ws):
         except Exception as e:
             print("[PING ERROR]", e)
             break
-        time.sleep(20)  # ping every 20s
+        time.sleep(15)  # reduced from 20s for more stability
 
 def on_open(ws):
     if DEBUG:
         print("[OPEN] Connected to Pocket Option WebSocket")
 
-    # Open default namespace
+    # Step 1: open namespace
     ws.send("40")
-    time.sleep(1)
+    time.sleep(1.5)  # Slightly longer delay
 
-    # Send auth message
+    # Auth message
     auth_payload = [
         "auth",
         {
@@ -45,11 +42,15 @@ def on_open(ws):
             "isChart": 1
         }
     ]
-    ws.send(f'42["auth",{json.dumps(auth_payload)}]')
-    time.sleep(1)
+    auth_msg = f'42["auth",{json.dumps(auth_payload)}]'
+    ws.send(auth_msg)
+    if DEBUG:
+        print(f"[SEND] {auth_msg}")
+    time.sleep(2)  # Slightly longer delay
 
     # Request assets list
     ws.send('42["getAssets", {}]')
+    time.sleep(1)
 
     # Start keepalive ping
     Thread(target=send_keepalive, args=(ws,), daemon=True).start()
@@ -75,12 +76,10 @@ def on_message(ws, message):
                 symbol_id = asset.get("symbol")
                 if symbol_id:
                     SYMBOLS.append(symbol_id)
-                    # Initialize market_data for new symbols
+                    # Initialize market_data entry for this symbol
                     market_data[symbol_id]["candles"] = {tf: [] for tf in TIMEFRAMES}
-                    market_data[symbol_id]["ticks"] = []
 
-            if DEBUG:
-                print(f"[INFO] Loaded symbols dynamically: {SYMBOLS}")
+            print(f"[INFO] Loaded symbols dynamically: {SYMBOLS}")
 
             # Subscribe to ticks and candles
             for symbol in SYMBOLS:
@@ -88,18 +87,14 @@ def on_message(ws, message):
                 for tf in TIMEFRAMES:
                     period_sec = int(tf[:-1]) * 60
                     ws.send(f'42["subscribe",{{"type":"candles","asset":"{symbol}","period":{period_sec}}}]')
-            if DEBUG:
-                print(f"[SUBSCRIBE] Subscribed to {len(SYMBOLS)} symbols 🔥")
+            print(f"[SUBSCRIBE] Subscribed to {len(SYMBOLS)} symbols 🔥")
 
         # --- Update ticks ---
         elif event == "ticks" and payload:
             symbol = payload.get("asset")
             price = payload.get("price")
             tick_time = datetime.utcfromtimestamp(payload["time"]).strftime("%Y-%m-%d %H:%M:%S")
-
-            if symbol not in market_data:
-                market_data[symbol] = {"ticks": [], "candles": {tf: [] for tf in TIMEFRAMES}}
-
+            market_data[symbol]["ticks"] = market_data[symbol].get("ticks", [])
             market_data[symbol]["ticks"].append({"price": price, "time": tick_time})
 
             # Emit tick to dashboard
@@ -110,9 +105,8 @@ def on_message(ws, message):
         elif event == "candles" and payload:
             symbol = payload.get("asset")
             period_sec = payload.get("period")
-            tf = f"{period_sec // 60}m"
+            tf = f"{period_sec//60}m"
             candle = payload.get("candle")
-
             if symbol and tf and candle:
                 market_data[symbol]["candles"][tf].append(candle)
                 # Keep only last 50 candles
@@ -129,7 +123,6 @@ def on_error(ws, error):
     print("[ERROR]", error)
 
 def run_ws():
-    """Main WebSocket loop with auto-reconnect."""
     while True:
         try:
             ws = websocket.WebSocketApp(
@@ -147,7 +140,7 @@ def run_ws():
         time.sleep(5)
 
 def start_pocket_ws(sio):
-    """Start Pocket Option WS in background from app.py."""
+    """Called from app.py to start PocketOption WS in background."""
     global socketio
     socketio = sio
     Thread(target=run_ws, daemon=True).start()
