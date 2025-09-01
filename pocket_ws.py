@@ -24,36 +24,31 @@ def send_keepalive(ws):
         time.sleep(15)  # reduced from 20s for more stability
 
 def on_open(ws):
-    if DEBUG:
-        print("[OPEN] Connected to Pocket Option WebSocket")
+    print("[OPEN] Connected to Pocket Option WebSocket")
 
     # Step 1: open namespace
     ws.send("40")
-    time.sleep(1.5)  # Slightly longer delay
+    print("[SEND] Namespace open (40) ✅")
 
-    # Auth message
-    auth_payload = [
-        "auth",
-        {
-            "sessionToken": sessionToken,
-            "uid": uid,
-            "lang": "en",
-            "currentUrl": "cabinet",
-            "isChart": 1
-        }
-    ]
+    time.sleep(1)  # small delay
+
+    # Step 2: correct authentication
+    auth_payload = {
+        "sessionToken": sessionToken,
+        "uid": uid,
+        "lang": "en",
+        "currentUrl": ACCOUNT_URL,  # e.g. "cabinet"
+        "isChart": 1
+    }
     auth_msg = f'42["auth",{json.dumps(auth_payload)}]'
     ws.send(auth_msg)
-    if DEBUG:
-        print(f"[SEND] {auth_msg}")
-    time.sleep(2)  # Slightly longer delay
+    print("[SEND] auth message sent ✅")
 
-    # Request assets list
-    ws.send('42["getAssets", {}]')
     time.sleep(1)
 
-    # Start keepalive ping
-    Thread(target=send_keepalive, args=(ws,), daemon=True).start()
+    # Step 3: request assets list
+    ws.send('42["getAssets", {}]')
+    print("[SEND] Requested assets list")
 
 def on_message(ws, message):
     global socketio
