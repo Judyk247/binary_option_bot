@@ -17,7 +17,7 @@
         .switch {
             position: relative;
             display: inline-block;
-            width: 120px;   /* bigger for labels */
+            width: 120px;
             height: 40px;
         }
         .switch input {display: none;}
@@ -25,7 +25,7 @@
             position: absolute;
             cursor: pointer;
             top: 0; left: 0; right: 0; bottom: 0;
-            background-color: #f44336; /* red for TEST */
+            background-color: #f44336;
             transition: .4s;
             border-radius: 34px;
             font-size: 14px;
@@ -43,14 +43,12 @@
             transition: .4s;
             border-radius: 50%;
         }
-        /* Default = TEST */
         .slider::after {
             content: "TEST";
             position: absolute;
             width: 100%;
             left: 0;
         }
-        /* When LIVE */
         input:checked + .slider {
             background-color: #4CAF50;
         }
@@ -95,6 +93,7 @@
             <tr>
                 <th>Symbol</th>
                 <th>Signal</th>
+                <th>Confidence (%)</th>
                 <th>Time (UTC)</th>
                 <th>Timeframe</th>
                 <th>Received At</th>
@@ -105,6 +104,42 @@
         </tbody>
     </table>
 
-    <script src="/static/dashboard.js"></script>
+    <script>
+        const socket = io();
+
+        function updateTable(signalData) {
+            const tbody = document.querySelector("#signals-table tbody");
+            // Remove old row if exists
+            const existingRow = document.querySelector(`#signals-table tbody tr[data-symbol='${signalData.symbol}'][data-tf='${signalData.timeframe}']`);
+            if (existingRow) existingRow.remove();
+
+            const row = document.createElement("tr");
+            row.dataset.symbol = signalData.symbol;
+            row.dataset.tf = signalData.timeframe;
+            row.innerHTML = `
+                <td>${signalData.symbol}</td>
+                <td>${signalData.signal}</td>
+                <td>${signalData.confidence ?? "-"}</td>
+                <td>${signalData.time}</td>
+                <td>${signalData.timeframe}</td>
+                <td>${new Date().toLocaleTimeString()}</td>
+            `;
+            tbody.prepend(row);
+        }
+
+        // Fetch initial signals via AJAX
+        fetch("/signals_data")
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById("last-update").textContent = data.last_update;
+                data.signals.forEach(updateTable);
+                document.getElementById("mode-label").textContent = data.mode;
+            });
+
+        // Listen to live signals via Socket.IO
+        socket.on("new_signal", signalData => {
+            updateTable(signalData);
+        });
+    </script>
 </body>
 </html>
