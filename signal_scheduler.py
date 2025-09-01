@@ -7,7 +7,7 @@ from telegram_utils import send_telegram_alert
 from data_fetcher import get_live_data
 
 # timeframes in minutes
-TIMEFRAMES = [1, 2, 3, 5]
+TIMEFRAMES = [1, 3, 5]
 
 def get_next_candle_time(timeframe):
     """Return datetime for next candle close based on timeframe (in minutes)."""
