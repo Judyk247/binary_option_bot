@@ -41,7 +41,7 @@ def on_open(ws):
         "sessionToken": sessionToken,
         "uid": uid,
         "lang": "en",
-        "currentUrl": ACCOUNT_URL,  # e.g. "cabinet"
+        "currentUrl": "cabinet"
         "isChart": 1
     }
     auth_msg = f'42["auth",{json.dumps(auth_payload)}]'
