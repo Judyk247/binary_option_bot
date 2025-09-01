@@ -36,14 +36,16 @@ def on_open(ws):
 
     time.sleep(1)  # small delay
 
-    # Step 2: correct authentication
-    auth_payload = {
-        "sessionToken": sessionToken,
-        "uid": uid,
-        "lang": "en",
-        "currentUrl": "cabinet"
-        "isChart": 1
-    }
+    auth_payload = [
+        "auth",
+        {
+            "sessionToken": sessionToken,   # from credentials.py
+            "uid": uid,                     # from credentials.py
+            "lang": "en",
+            "currentUrl": cabinet,      # "cabinet" from credentials.py
+            "isChart": 1
+        }
+    ]
     auth_msg = f'42["auth",{json.dumps(auth_payload)}]'
     ws.send(auth_msg)
     print("[SEND] auth message sent ✅")
