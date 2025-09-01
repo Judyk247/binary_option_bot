@@ -3,156 +3,124 @@ import time
 import websocket
 from datetime import datetime
 from threading import Thread
+from config import SYMBOLS, market_data, TIMEFRAMES, DEBUG
+from credentials import uid, sessionToken, ACCOUNT_URL
 
 # Flask socketio instance will be injected from app.py
 socketio = None  
 
-from credentials import uid, sessionToken, ACCOUNT_URL
-
 POCKET_WS_URL = "wss://chat-po.site/cabinet-client/socket.io/?EIO=4&transport=websocket"
-
-# Keep track of subscribed assets for auto-resubscribe
-subscribed_assets = []
-
 
 def send_keepalive(ws):
     """Keep-alive ping loop (prevents server disconnect)."""
     while True:
         try:
             ws.send("2")  # Engine.IO ping
-            print("[PING] Keep-alive sent")
+            if DEBUG:
+                print("[PING] Keep-alive sent")
         except Exception as e:
             print("[PING ERROR]", e)
             break
         time.sleep(20)  # send ping every 20s
 
-
 def on_open(ws):
-    print("[OPEN] Connected to Pocket Option WebSocket")
+    if DEBUG:
+        print("[OPEN] Connected to Pocket Option WebSocket")
 
     # Step 1: open namespace
     ws.send("40")
-    print("[SEND] Namespace open (40) ✅")
+    time.sleep(1)
 
-    time.sleep(1)  # small delay
-
+    # Auth message
     auth_payload = [
         "auth",
         {
-            "sessionToken": sessionToken,   # from credentials.py
-            "uid": uid,                     # from credentials.py
+            "sessionToken": sessionToken,
+            "uid": uid,
             "lang": "en",
-            "currentUrl": cabinet,      # "cabinet" from credentials.py
+            "currentUrl": "cabinet",
             "isChart": 1
         }
     ]
     auth_msg = f'42["auth",{json.dumps(auth_payload)}]'
     ws.send(auth_msg)
-    print("[SEND] auth message sent ✅")
-
     time.sleep(1)
 
-    # Step 3: request assets list
+    # Request assets list
     ws.send('42["getAssets", {}]')
-    print("[SEND] Requested assets list")
+
+    # Start keepalive ping
+    Thread(target=send_keepalive, args=(ws,), daemon=True).start()
 
 def on_message(ws, message):
     global socketio
 
-    # Always log raw message
-    print(f"[RAW] {message}")
-
     try:
-        # ---- Socket.IO handshake ----
-        if message.startswith("0{"):
-            print("[HANDSHAKE] Received Socket.IO handshake ✅")
-            ws.send("40")  # open default namespace
-            print("[SEND] Sent '40' (open namespace)")
+        if not message.startswith("42"):
+            return
 
-        # ---- Namespace opened ----
-        elif message == "40":
-            print("[NAMESPACE] Default namespace opened ✅")
-            # Send user_init immediately after namespace is open
-            ws.send(json.dumps(["user_init", {
-                "sessionToken": sessionToken,
-                "uid": uid,
-                "lang": "en"
-            }]).replace("[", '42[', 1))
-            print("[SEND] user_init message sent ✅")
+        data = json.loads(message[2:])
+        event = data[0]
+        payload = data[1] if len(data) > 1 else None
 
-        # ---- Server ping ----
-        elif message == "2":
-            print("[PING] Received ping → sending pong (3)")
-            ws.send("3")
+        if DEBUG:
+            print("[WS MESSAGE]", event, payload)
 
-        # ---- Server disconnect ----
-        elif message == "41":
-            print("[DISCONNECT] Server closed namespace ❌")
+        # --- Populate SYMBOLS dynamically ---
+        if event == "assets" and payload:
+            SYMBOLS.clear()
+            for asset in payload:
+                symbol_id = asset.get("symbol")
+                if symbol_id:
+                    SYMBOLS.append(symbol_id)
+                    # Initialize market_data entry for this symbol
+                    market_data[symbol_id]["candles"] = {tf: [] for tf in TIMEFRAMES}
 
-        # ---- Socket.IO event messages ----
-        elif message.startswith("42"):
-            try:
-                data = json.loads(message[2:])
-                event = data[0]
-                payload = data[1] if len(data) > 1 else None
-                print(f"[EVENT] {event} | Payload: {payload}")
+            print(f"[INFO] Loaded symbols dynamically: {SYMBOLS}")
 
-                if event == "user_init":
-                    print(f"[AUTH-STEP1] Server acknowledged user_init ✅ Payload={payload}")
+            # Subscribe to ticks and candles
+            for symbol in SYMBOLS:
+                ws.send(f'42["subscribe",{{"type":"ticks","asset":"{symbol}"}}]')
+                for tf in TIMEFRAMES:
+                    period_sec = int(tf[:-1]) * 60
+                    ws.send(f'42["subscribe",{{"type":"candles","asset":"{symbol}","period":{period_sec}}}]')
+            print(f"[SUBSCRIBE] Subscribed to {len(SYMBOLS)} symbols 🔥")
 
-                elif event == "user_data":
-                    print(f"[AUTH-STEP2] Authentication confirmed 🎉 User data received")
-                    print(f"   UID: {payload.get('uid')}, Balance: {payload.get('balance')}")
-                    # Once authenticated, request asset list
-                    ws.send('42["getAssets", {}]')
-                    print("[SEND] Requested assets list from PocketOption")
+        # --- Update ticks ---
+        elif event == "ticks" and payload:
+            symbol = payload.get("asset")
+            price = payload.get("price")
+            tick_time = datetime.utcfromtimestamp(payload["time"]).strftime("%Y-%m-%d %H:%M:%S")
+            market_data[symbol]["ticks"] = market_data[symbol].get("ticks", [])
+            market_data[symbol]["ticks"].append({"price": price, "time": tick_time})
 
-                elif event == "assets":
-                    print("[RECV] Assets list received ✅")
-                    assets = [
-                        a["symbol"] for a in payload
-                        if a.get("enabled") and a.get("type") == "forex"
-                    ]
-                    for asset in assets:
-                        ws.send(f'42["subscribe",{{"type":"ticks","asset":"{asset}"}}]')
-                    print(f"[SUBSCRIBE] Subscribed to {len(assets)} forex pairs 🔥")
+            # Emit tick to dashboard
+            if socketio:
+                socketio.emit("new_tick", {"symbol": symbol, "price": price, "time": tick_time})
 
-                elif event == "ticks":
-                    symbol = payload.get("asset")
-                    price = payload.get("price")
-                    tick_time = datetime.utcfromtimestamp(
-                        payload["time"]
-                    ).strftime("%Y-%m-%d %H:%M:%S")
-                    print(f"[TICK] {symbol}: {price} at {tick_time}")
-
-                    tick_data = {"symbol": symbol, "price": price, "time": tick_time}
-                    if socketio:
-                        socketio.emit("new_tick", tick_data)
-
-                else:
-                    print("[DEBUG] Unhandled event:", event, payload)
-
-            except Exception as e:
-                print("[ERROR decoding event]", e)
-
-        else:
-            # Unknown control message
-            print(f"[CTRL/OTHER] {message}")
+        # --- Update candles ---
+        elif event == "candles" and payload:
+            symbol = payload.get("asset")
+            period_sec = payload.get("period")
+            tf = f"{period_sec//60}m"
+            candle = payload.get("candle")
+            if symbol and tf and candle:
+                market_data[symbol]["candles"][tf].append(candle)
+                # Keep only last 50 candles
+                if len(market_data[symbol]["candles"][tf]) > 50:
+                    market_data[symbol]["candles"][tf].pop(0)
 
     except Exception as e:
-        print("[ERROR parsing message]", e)
-
+        print("[WS ERROR parsing message]", e)
 
 def on_close(ws, close_status_code, close_msg):
     print("[CLOSE] Connection closed:", close_status_code, close_msg)
 
-
 def on_error(ws, error):
     print("[ERROR]", error)
 
-
 def run_ws():
-    while True:  # 24/7 auto-reconnect
+    while True:
         try:
             ws = websocket.WebSocketApp(
                 POCKET_WS_URL,
@@ -160,7 +128,7 @@ def run_ws():
                 on_message=on_message,
                 on_close=on_close,
                 on_error=on_error,
-                header=["Origin: https://m.pocketoption.com"]  # required header
+                header=["Origin: https://m.pocketoption.com"]
             )
             ws.run_forever()
         except Exception as e:
@@ -168,15 +136,11 @@ def run_ws():
         print("⏳ Reconnecting in 5 seconds...")
         time.sleep(5)
 
-
 def start_pocket_ws(sio):
     """Called from app.py to start PocketOption WS in background."""
     global socketio
     socketio = sio
-
-    t = Thread(target=run_ws, daemon=True)
-    t.start()
-
+    Thread(target=run_ws, daemon=True).start()
 
 if __name__ == "__main__":
     print("⚠️ Run this only from app.py, not directly.")
