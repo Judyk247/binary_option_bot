@@ -3,7 +3,7 @@ import time
 import websocket
 import threading
 from collections import defaultdict
-from credentials import POCKET_SESSION_TOKEN, POCKET_USER_ID, POCKET_ACCOUNT_URL
+from credentials import SECRET, ID, ACCOUNT_URL
 from strategy import analyze_candles  # Your EMA/Stochastic/Alligator logic
 from telegram_utils import send_telegram_message  # Your Telegram alert function
 from config import TELEGRAM_CHAT_IDS
@@ -23,11 +23,13 @@ last_heartbeat = 0
 
 # --- Hardcoded fallback: 30 most popular Forex pairs ---
 DEFAULT_SYMBOLS = [
-    "EUR/USD", "GBP/USD", "USD/JPY", "USD/CHF", "AUD/USD", "NZD/USD",
-    "USD/CAD", "EUR/GBP", "EUR/JPY", "GBP/JPY", "AUD/JPY", "NZD/JPY",
-    "EUR/AUD", "EUR/NZD", "EUR/CAD", "EUR/CHF", "GBP/AUD", "GBP/NZD",
-    "GBP/CAD", "GBP/CHF", "AUD/NZD", "AUD/CAD", "AUD/CHF", "NZD/CAD",
-    "NZD/CHF", "CAD/CHF", "CAD/JPY", "CHF/JPY", "EUR/SEK", "EUR/NOK"
+    "EUR/USD OTC", "GBP/USD OTC", "USD/JPY OTC", "USD/CHF OTC", "AUD/USD OTC", "NZD/USD OTC",
+    "USD/CAD OTC", "EUR/GBP OTC", "EUR/JPY OTC", "GBP/JPY OTC", "AUD/JPY OTC", "NZD/JPY OTC",
+    "EUR/AUD OTC", "EUR/NZD OTC", "EUR/CAD OTC", "EUR/CHF OTC", "GBP/AUD OTC", "GBP/NZD OTC",
+    "GBP/CAD OTC", "GBP/CHF OTC", "AUD/NZD OTC", "AUD/CAD OTC", "AUD/CHF OTC", "NZD/CAD OTC",
+    "NZD/CHF OTC", "CAD/CHF OTC", "CAD/JPY OTC", "CHF/JPY OTC", "EUR/SEK OTC", "EUR/NOK OTC",
+    "USD/SEK OTC", "USD/NOK OTC", "AUD/SGD OTC", "GBP/SGD OTC", "EUR/SGD OTC", "USD/SGD OTC",
+    "EUR/HUF OTC", "USD/HUF OTC", "EUR/PLN OTC", "USD/PLN OTC"
 ]
 
 def send_heartbeat(ws):
