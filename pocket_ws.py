@@ -30,35 +30,29 @@ def send_keepalive(ws):
 def on_open(ws):
     print("[OPEN] Connected to Pocket Option WebSocket")
 
-    # Start keep-alive thread immediately (so connection stays alive)
-    t = Thread(target=send_keepalive, args=(ws,), daemon=True)
-    t.start()
-
-    # Step 1: open namespace first
-    ws.send("40")  
+    # Step 1: open namespace
+    ws.send("40")
     print("[SEND] Namespace open (40) ✅")
 
-    # Small delay before sending authentication (to avoid "too early" issue)
-    time.sleep(1)
+    time.sleep(1)  # small delay
 
-    # Step 2: Send user_init authentication (id + sessionToken + extra info)
+    # Step 2: correct authentication
     auth_payload = {
-        "id": int(uid),
-        "sessionToken": sessionToken,   # <-- use sessionToken here
-        "uid": str(uid),             # Pocket also expects uid field
+        "sessionToken": sessionToken,
+        "uid": uid,
         "lang": "en",
-        "currentUrl": "cabinet",  # or demo-quick-high-low
+        "currentUrl": ACCOUNT_URL,  # e.g. "cabinet"
         "isChart": 1
     }
-    auth_msg = f'42["user_init",{json.dumps(auth_payload)}]'
+    auth_msg = f'42["auth",{json.dumps(auth_payload)}]'
     ws.send(auth_msg)
-    print("[SEND] user_init message sent ✅")
+    print("[SEND] auth message sent ✅")
 
-    # Step 3: Delay again before requesting assets (to let auth settle)
     time.sleep(1)
-    ws.send('42["getAssets", {}]')
-    print("[SEND] Requested assets list (after reconnect)")
 
+    # Step 3: request assets list
+    ws.send('42["getAssets", {}]')
+    print("[SEND] Requested assets list")
 
 def on_message(ws, message):
     global socketio
