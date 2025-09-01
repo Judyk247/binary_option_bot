@@ -17,7 +17,7 @@ for symbol in SYMBOLS:
         market_data[symbol]["candles"][tf] = []
 
 # --- Supported candle periods in seconds ---
-CANDLE_PERIODS = [60, 120, 180, 300]  # 1m, 2m, 3m, 5m
+CANDLE_PERIODS = [60, 180, 300]  # 1m, 3m, 5m
 POCKET_WS_URL = "wss://chat-po.site/cabinet-client/socket.io/?EIO=4&transport=websocket"
 
 # --- Heartbeat to keep WS alive ---
@@ -161,5 +161,4 @@ def start_fetching(symbols, timeframes, socketio, latest_signals):
 
         time.sleep(5)
 
-if __name__ == "__main__":
-    run_ws()
+
