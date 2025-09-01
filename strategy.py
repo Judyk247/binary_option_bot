@@ -59,11 +59,6 @@ def detect_bearish_engulfing(df):
 
 # --- Multi-Timeframe Confirmation ---
 def multi_timeframe_confirmation(lower_signal, mid_df, high_df):
-    """
-    lower_signal = signal from 1m
-    mid_df = 3m candles (must agree with 1m)
-    high_df = 5m candles (filter, must not oppose)
-    """
     if lower_signal is None:
         return None
 
@@ -81,15 +76,14 @@ def multi_timeframe_confirmation(lower_signal, mid_df, high_df):
     mid_bias, _ = get_bias(mid_df)
     high_bias, _ = get_bias(high_df)
 
-    # 1m Buy needs 3m bullish, and 5m not bearish
     if lower_signal == "buy" and mid_bias == "bullish" and high_bias != "bearish":
         return "buy"
-    # 1m Sell needs 3m bearish, and 5m not bullish
     elif lower_signal == "sell" and mid_bias == "bearish" and high_bias != "bullish":
         return "sell"
     else:
         return None
 
+# --- Main Analyzer with Confidence ---
 def analyze_candles(df, mid_df=None, high_df=None, debug=False):
     if len(df) < 50:
         if debug:
@@ -119,37 +113,56 @@ def analyze_candles(df, mid_df=None, high_df=None, debug=False):
     momentum_bull = (ha_df['close'].iloc[-3:] > ha_df['open'].iloc[-3:]).sum() >= 2
     momentum_bear = (ha_df['close'].iloc[-3:] < ha_df['open'].iloc[-3:]).sum() >= 2
 
-    is_buy = (
-        ha_df['close'].iloc[last_idx] > jaw.iloc[last_idx] and
-        ha_df['close'].iloc[last_idx] > teeth.iloc[last_idx] and
-        ha_df['close'].iloc[last_idx] > lips.iloc[last_idx] and
-        k.iloc[last_idx] > d.iloc[last_idx] and
-        k.iloc[last_idx] < 30 and
-        bullish_bias and bullish_pattern and
-        atr.iloc[last_idx] > 0 and
-        ema_slope > 0 and min_atr and
-        momentum_bull and
-        upper_wick < body * 0.5
-    )
+    # --- Scoring system ---
+    score = 0
+    total_checks = 10
 
-    is_sell = (
-        ha_df['close'].iloc[last_idx] < jaw.iloc[last_idx] and
-        ha_df['close'].iloc[last_idx] < teeth.iloc[last_idx] and
-        ha_df['close'].iloc[last_idx] < lips.iloc[last_idx] and
-        k.iloc[last_idx] < d.iloc[last_idx] and
-        k.iloc[last_idx] > 80 and
-        bearish_bias and bearish_pattern and
-        atr.iloc[last_idx] > 0 and
-        ema_slope < 0 and min_atr and
-        momentum_bear and
-        lower_wick < body * 0.5
-    )
+    # Buy conditions
+    if ha_df['close'].iloc[last_idx] > jaw.iloc[last_idx]: score += 1
+    if ha_df['close'].iloc[last_idx] > teeth.iloc[last_idx]: score += 1
+    if ha_df['close'].iloc[last_idx] > lips.iloc[last_idx]: score += 1
+    if k.iloc[last_idx] > d.iloc[last_idx]: score += 1
+    if k.iloc[last_idx] < 30: score += 1
+    if bullish_bias: score += 1
+    if bullish_pattern: score += 1
+    if atr.iloc[last_idx] > 0 and min_atr: score += 1
+    if ema_slope > 0: score += 1
+    if momentum_bull: score += 1
 
-    raw_signal = "buy" if is_buy else "sell" if is_sell else None
+    buy_score = score
+
+    # Reset for sell scoring
+    score = 0
+    if ha_df['close'].iloc[last_idx] < jaw.iloc[last_idx]: score += 1
+    if ha_df['close'].iloc[last_idx] < teeth.iloc[last_idx]: score += 1
+    if ha_df['close'].iloc[last_idx] < lips.iloc[last_idx]: score += 1
+    if k.iloc[last_idx] < d.iloc[last_idx]: score += 1
+    if k.iloc[last_idx] > 80: score += 1
+    if bearish_bias: score += 1
+    if bearish_pattern: score += 1
+    if atr.iloc[last_idx] > 0 and min_atr: score += 1
+    if ema_slope < 0: score += 1
+    if momentum_bear: score += 1
+
+    sell_score = score
+
+    # Decide raw signal
+    if buy_score >= sell_score and buy_score >= 6:
+        raw_signal = "buy"
+        confidence = int((buy_score / total_checks) * 100)
+    elif sell_score > buy_score and sell_score >= 6:
+        raw_signal = "sell"
+        confidence = int((sell_score / total_checks) * 100)
+    else:
+        raw_signal, confidence = None, 0
+
+    # Apply multi-timeframe confirmation
     confirmed = multi_timeframe_confirmation(raw_signal, mid_df, high_df)
+    if confirmed is None:
+        confidence = 0  # reject if higher TF disagrees
 
     if debug:
         print("--- Candle Analysis Debug ---")
-        print("Raw Signal:", raw_signal, "Confirmed:", confirmed)
+        print("Raw:", raw_signal, "Confirmed:", confirmed, "Confidence:", confidence)
 
-    return confirmed
+    return {"signal": confirmed, "confidence": confidence}
