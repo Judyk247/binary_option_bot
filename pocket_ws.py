@@ -43,11 +43,11 @@ def on_open(ws):
 
     # Step 2: Send user_init authentication (id + sessionToken + extra info)
     auth_payload = {
-        "id": int(ID),
-        "sessionToken": SECRET,   # <-- use sessionToken here
-        "uid": str(ID),             # Pocket also expects uid field
+        "id": int(uid),
+        "sessionToken": sessionToken,   # <-- use sessionToken here
+        "uid": str(uid),             # Pocket also expects uid field
         "lang": "en",
-        "currentUrl": "https://m.pocketoption.com/cabinet/real-quick-high-low",  # or demo-quick-high-low
+        "currentUrl": "cabinet",  # or demo-quick-high-low
         "isChart": 1
     }
     auth_msg = f'42["user_init",{json.dumps(auth_payload)}]'
@@ -78,8 +78,8 @@ def on_message(ws, message):
             print("[NAMESPACE] Default namespace opened ✅")
             # Send user_init immediately after namespace is open
             ws.send(json.dumps(["user_init", {
-                "session": POCKET_SESSION_TOKEN,
-                "uid": POCKET_UID,
+                "sessionToken": sessionToken,
+                "uid": uid,
                 "lang": "en"
             }]).replace("[", '42[', 1))
             print("[SEND] user_init message sent ✅")
