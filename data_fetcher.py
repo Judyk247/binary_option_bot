@@ -136,9 +136,13 @@ def start_fetching(symbols, timeframes, socketio, latest_signals):
         for symbol in (symbols or DEFAULT_SYMBOLS):
             for tf in timeframes:
                 candles = market_data[symbol]["candles"].get(tf_to_seconds(tf), [])
+                
                 if not candles:
+                    print(f"[DEBUG] No candles yet for {symbol} {tf}")
                     continue
+
                 df = pd.DataFrame(candles)
+                
                 # Run your strategy (expects analyze_candles to return tuple: signal, confidence)
                 result = analyze_candles(df)
                 
@@ -151,10 +155,13 @@ def start_fetching(symbols, timeframes, socketio, latest_signals):
                 signal_data = {
                     "symbol": symbol,
                     "signal": signal_value if signal_value else "HOLD",
-                    "confidence": confidence,  # <-- added
+                    "confidence": confidence,
                     "time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
                     "timeframe": tf
                 }
+
+                # Debug: Print signal info before emitting
+                print(f"[DEBUG] {signal_data['time']} | {symbol} {tf} -> Signal: {signal_data['signal']} | Confidence: {signal_data['confidence']}%")
 
                 # Update latest_signals list for dashboard
                 latest_signals[:] = [s for s in latest_signals if not (s["symbol"] == symbol and s["timeframe"] == tf)]
@@ -162,6 +169,7 @@ def start_fetching(symbols, timeframes, socketio, latest_signals):
 
                 # Emit live update to frontend
                 socketio.emit("new_signal", signal_data)
+                print(f"[DEBUG] Emitted signal to dashboard: {symbol} {tf}")
 
                 # Send Telegram alert only if there is a BUY/SELL signal
                 if signal_value in ["BUY", "SELL"]:
@@ -169,11 +177,11 @@ def start_fetching(symbols, timeframes, socketio, latest_signals):
                         if chat_id:
                             try:
                                 send_telegram_message(chat_id, f"{symbol} {tf} signal: {signal_value} ({confidence}%)")
+                                print(f"[DEBUG] Telegram alert sent to {chat_id}: {signal_value} ({confidence}%)")
                             except Exception as e:
                                 print("[TELEGRAM ERROR]", e)
 
         time.sleep(5)  # Check every 5 seconds
-
 def tf_to_seconds(tf):
     """Convert string timeframe (1m, 2m, 3m, 5m) to seconds"""
     return int(tf[:-1]) * 60
