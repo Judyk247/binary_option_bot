@@ -7,7 +7,7 @@ from threading import Thread
 # Flask socketio instance will be injected from app.py
 socketio = None  
 
-from credentials import ID, SECRET
+from credentials import uid, sessionToken
 
 POCKET_WS_URL = "wss://chat-po.site/cabinet-client/socket.io/?EIO=4&transport=websocket"
 
