@@ -7,7 +7,7 @@ from threading import Thread
 # Flask socketio instance will be injected from app.py
 socketio = None  
 
-from credentials import POCKET_USER_ID, POCKET_SESSION_TOKEN
+from credentials import ID, SECRET
 
 POCKET_WS_URL = "wss://chat-po.site/cabinet-client/socket.io/?EIO=4&transport=websocket"
 
@@ -43,9 +43,9 @@ def on_open(ws):
 
     # Step 2: Send user_init authentication (id + sessionToken + extra info)
     auth_payload = {
-        "id": int(POCKET_USER_ID),
-        "sessionToken": POCKET_SESSION_TOKEN,   # <-- use sessionToken here
-        "uid": str(POCKET_USER_ID),             # Pocket also expects uid field
+        "id": int(ID),
+        "sessionToken": SECRET,   # <-- use sessionToken here
+        "uid": str(ID),             # Pocket also expects uid field
         "lang": "en",
         "currentUrl": "cabinet/real-quick-high-low",  # or demo-quick-high-low
         "isChart": 1
