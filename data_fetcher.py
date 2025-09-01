@@ -3,7 +3,7 @@ import time
 import websocket
 import threading
 from collections import defaultdict
-from credentials import SECRET, ID, ACCOUNT_URL
+from credentials import sessionToken, uid, ACCOUNT_URL
 from strategy import analyze_candles  # Your EMA/Stochastic/Alligator logic
 from telegram_utils import send_telegram_message  # Your Telegram alert function
 from config import TELEGRAM_CHAT_IDS
