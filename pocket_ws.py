@@ -9,7 +9,7 @@ from credentials import uid, sessionToken, ACCOUNT_URL
 # Flask socketio instance will be injected from app.py
 socketio = None  
 
-POCKET_WS_URL = "wss://chat-po.site/cabinet-client/socket.io/?EIO=4&transport=websocket"
+WS_URL = "wss://events-po.com/socket.io/?EIO=4&transport=websocket"
 
 def send_keepalive(ws):
     """Keep-alive ping loop (prevents server disconnect)."""
