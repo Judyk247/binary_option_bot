@@ -3,7 +3,7 @@
 # Pocket Option credentials
 sessionToken = "b651d1bb804319e18d46104a66f13197"
 uid = "107618624"
-ACCOUNT_URL = "cabinet"
+currentUrl = "ACCOUNT_URL"
 
 # Ensure credentials are set
 if not sessionToken or not uid:
