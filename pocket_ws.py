@@ -21,7 +21,7 @@ def send_keepalive(ws):
         except Exception as e:
             print("[PING ERROR]", e)
             break
-        time.sleep(15)  # reduced from 20s for more stability
+        time.sleep(15)  # < pingInterval (25s) to stay alive
 
 def on_open(ws):
     print("[OPEN] Connected to Pocket Option WebSocket")
@@ -30,14 +30,14 @@ def on_open(ws):
     ws.send("40")
     print("[SEND] Namespace open (40) ✅")
 
-    time.sleep(1)  # small delay
+    time.sleep(1)
 
-    # Step 2: correct authentication
+    # Step 2: authentication
     auth_payload = {
         "sessionToken": sessionToken,
         "uid": uid,
         "lang": "en",
-        "currentUrl": ACCOUNT_URL,  # e.g. "cabinet"
+        "currentUrl": ACCOUNT_URL,  # usually "cabinet"
         "isChart": 1
     }
     auth_msg = f'42["auth",{json.dumps(auth_payload)}]'
@@ -50,10 +50,16 @@ def on_open(ws):
     ws.send('42["getAssets", {}]')
     print("[SEND] Requested assets list")
 
+    # Start keepalive pings
+    Thread(target=send_keepalive, args=(ws,), daemon=True).start()
+
 def on_message(ws, message):
     global socketio
-
     try:
+        # ✅ Always print the raw message
+        print(f"[RAW MESSAGE] {message}")
+
+        # Only parse Socket.IO event messages (42 prefix)
         if not message.startswith("42"):
             return
 
@@ -62,7 +68,7 @@ def on_message(ws, message):
         payload = data[1] if len(data) > 1 else None
 
         if DEBUG:
-            print("[WS MESSAGE]", event, payload)
+            print(f"[WS EVENT] {event} | Payload: {payload}")
 
         # --- Populate SYMBOLS dynamically ---
         if event == "assets" and payload:
@@ -71,12 +77,11 @@ def on_message(ws, message):
                 symbol_id = asset.get("symbol")
                 if symbol_id:
                     SYMBOLS.append(symbol_id)
-                    # Initialize market_data entry for this symbol
                     market_data[symbol_id]["candles"] = {tf: [] for tf in TIMEFRAMES}
 
             print(f"[INFO] Loaded symbols dynamically: {SYMBOLS}")
 
-            # Subscribe to ticks and candles
+            # Subscribe after symbols are loaded
             for symbol in SYMBOLS:
                 ws.send(f'42["subscribe",{{"type":"ticks","asset":"{symbol}"}}]')
                 for tf in TIMEFRAMES:
@@ -92,7 +97,6 @@ def on_message(ws, message):
             market_data[symbol]["ticks"] = market_data[symbol].get("ticks", [])
             market_data[symbol]["ticks"].append({"price": price, "time": tick_time})
 
-            # Emit tick to dashboard
             if socketio:
                 socketio.emit("new_tick", {"symbol": symbol, "price": price, "time": tick_time})
 
@@ -104,7 +108,6 @@ def on_message(ws, message):
             candle = payload.get("candle")
             if symbol and tf and candle:
                 market_data[symbol]["candles"][tf].append(candle)
-                # Keep only last 50 candles
                 if len(market_data[symbol]["candles"][tf]) > 50:
                     market_data[symbol]["candles"][tf].pop(0)
 
@@ -135,7 +138,6 @@ def run_ws():
         time.sleep(5)
 
 def start_pocket_ws(sio):
-    """Called from app.py to start PocketOption WS in background."""
     global socketio
     socketio = sio
     Thread(target=run_ws, daemon=True).start()
