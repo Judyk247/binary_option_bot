@@ -49,28 +49,25 @@ def on_message(ws, message):
             if DEBUG:
                 print("[INFO] Namespace confirmed:", message)
 
-            # ✅ Send auth in a separate thread after a short delay
-            def send_auth_delayed():
-                time.sleep(0.25)  # 250ms delay
-                auth_payload = {
-                    "sessionToken": sessionToken,
-                    "uid": uid,
-                    "lang": "en",
-                    "currentUrl": ACCOUNT_URL,
-                    "isChart": 1
-                }
-                auth_msg = f'42["auth",{json.dumps(auth_payload)}]'
-                ws.send(auth_msg)
-                print("[SEND] auth message sent ✅")
+            # ✅ Send auth immediately, inline
+            auth_payload = {
+                "sessionToken": sessionToken,
+                "uid": uid,
+                "lang": "en",
+                "currentUrl": ACCOUNT_URL,
+                "isChart": 1
+            }
+            auth_msg = f'42["auth",{json.dumps(auth_payload)}]'
+            ws.send(auth_msg)
+            print("[SEND] auth message sent ✅")
 
-                # Request assets after auth
-                ws.send('42["getAssets", {}]')
-                print("[SEND] Requested assets list")
+            # Request assets after auth
+            ws.send('42["getAssets", {}]')
+            print("[SEND] Requested assets list")
 
-                # Optional immediate ping
-                ws.send("2")
+            # Optional immediate ping
+            ws.send("2")
 
-            Thread(target=send_auth_delayed, daemon=True).start()
             return
 
         # "41" = ack, just log it
