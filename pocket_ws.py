@@ -146,7 +146,7 @@ def run_ws():
         print("⏳ Reconnecting in 5 seconds...")
         time.sleep(5)
 
-def start_pocket_ws(sio):
+def start_pocket_ws(socketio, POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL):
     global socketio
     socketio = sio
     Thread(target=run_ws, daemon=True).start()
