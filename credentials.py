@@ -3,7 +3,8 @@
 # Pocket Option credentials
 sessionToken = "b651d1bb804319e18d46104a66f13197"
 uid = "107618624"
-ACCOUNT_URL = "cabinet"
+ACCOUNT_URL = "https://m.pocketoption.com"
+WS_URL = "wss://events-po.com/socket.io/?EIO=4&transport=websocket"
 
 # Ensure credentials are set
 if not sessionToken or not uid:
