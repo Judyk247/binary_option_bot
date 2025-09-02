@@ -14,7 +14,7 @@ PO_EMAIL = os.getenv("PO_EMAIL")
 PO_PASSWORD = os.getenv("PO_PASSWORD")
 
 # --- WebSocket URL ---
-PO_WS_URL = "wss://chat-po.site/cabinet-client/socket.io/?EIO=4&transport=websocket"
+WS_URL = "wss://events-po.com/socket.io/?EIO=4&transport=websocket"
 
 # --- Telegram ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
