@@ -36,14 +36,7 @@ def start_background_workers():
     logging.info("🔌 Connecting to PocketOption WebSocket (LIVE mode)...")
     threading.Thread(
         target=start_pocket_ws,
-        args=(socketio,),   # pass socketio only
-        daemon=True
-    ).start()
-
-    # Run fetching service
-    threading.Thread(
-        target=start_fetching,
-        args=(SYMBOLS, TIMEFRAMES, socketio, latest_signals),
+        args=(socketio, POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL),  # 👈 pass URL + creds
         daemon=True
     ).start()
 # -----------------------------
