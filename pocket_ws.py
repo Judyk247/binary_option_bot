@@ -111,32 +111,37 @@ def on_error(ws, error):
     print("[ERROR]", error)
 
 
-def run_ws():
-    while True:  # 24/7 auto-reconnect
+def run_ws(POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL):
+    while True:
         try:
             ws = websocket.WebSocketApp(
                 POCKET_WS_URL,
-                on_open=on_open,
+                on_open=lambda ws: on_open(ws, sessionToken, uid, ACCOUNT_URL),
                 on_message=on_message,
                 on_close=on_close,
                 on_error=on_error,
-                header=["Origin: https://m.pocketoption.com"]  # required header
+                header=["Origin: https://m.pocketoption.com"]
             )
+
+            threading.Thread(target=send_heartbeat, args=(ws,), daemon=True).start()
             ws.run_forever()
         except Exception as e:
             print("[FATAL ERROR]", e)
-        print("⏳ Reconnecting in 5 seconds...")
         time.sleep(5)
 
+def start_pocket_ws(socketio, POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL):
+    """
+    Starts the Pocket Option WebSocket in a separate thread.
+    """
+    global socketio_instance
+    socketio_instance = socketio
 
-def start_pocket_ws(sio):
-    """Called from app.py to start PocketOption WS in background."""
-    global socketio
-    socketio = sio
-
-    t = Thread(target=run_ws, daemon=True)
+    t = threading.Thread(
+        target=run_ws,
+        args=(POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL),
+        daemon=True
+    )
     t.start()
-
 
 if __name__ == "__main__":
     print("⚠️ Run this only from app.py, not directly.")
