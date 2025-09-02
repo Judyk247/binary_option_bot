@@ -7,9 +7,9 @@ from threading import Thread
 # Flask socketio instance will be injected from app.py
 socketio = None  
 
-from credentials import POCKET_USER_ID, POCKET_SESSION_TOKEN
+from credentials import uid, sessionToken, ACCOUNT_URL
 
-POCKET_WS_URL = "wss://chat-po.site/cabinet-client/socket.io/?EIO=4&transport=websocket"
+POCKET_WS_URL = "wss://events-po.com/socket.io/?EIO=4&transport=websocket"
 
 # Keep track of subscribed assets for auto-resubscribe
 subscribed_assets = []
@@ -50,22 +50,22 @@ def on_open(ws):
     except Exception as e:
         logging.error(f"[ERROR] Failed to send namespace open: {e}")
 
-    # Send user_init authentication
+    # Send authentication
     try:
-        user_init = [
-            "user_init",
+        auth_payload = [
+            "auth",
             {
-                "sessionToken": POCKET_SESSION_TOKEN,
-                "uid": POCKET_USER_ID,
+                "sessionToken": sessionToken,
+                "uid": uid,
                 "lang": "en",
-                "currentUrl": "cabinet/quick-high-low",  # ✅ real account
+                "currentUrl": ACCOUNT_URL,  # ✅ real account
                 "isChart": 1
             }
         ]
-        ws.send("42" + json.dumps(user_init))
-        logging.info("[SEND] user_init message sent ✅")
+        ws.send("42" + json.dumps(auth_payload))
+        logging.info("[SEND] auth message sent ✅")
     except Exception as e:
-        logging.error(f"[ERROR] Failed to send user_init: {e}")
+        logging.error(f"[ERROR] Failed to send auth: {e}")
 
     # Request assets list (example extra init call)
     try:
