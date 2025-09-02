@@ -59,19 +59,16 @@ def on_message(ws, message):
         # ✅ Always print the raw message
         print(f"[RAW MESSAGE] {message}")
 
-        # --- Handle special engine/io & namespace open cases ---
+        # --- Handle special engine.io & namespace messages safely ---
         if message.startswith("0"):
-            # Engine.IO handshake
             if DEBUG:
                 print("[INFO] Engine.IO handshake received")
             return
         if message.startswith("40{"):
-            # Namespace confirmation (safe to ignore, just log)
             if DEBUG:
                 print("[INFO] Namespace confirmed:", message)
             return
         if message == "40":
-            # Plain namespace open
             if DEBUG:
                 print("[INFO] Namespace opened (40)")
             return
