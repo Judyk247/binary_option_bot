@@ -33,26 +33,18 @@ MAX_SIGNALS = 50     # Keep only the last 50
 def start_background_workers():
     """Start PocketOption WebSocket + data fetcher in LIVE mode."""
     logging.info("🔌 Connecting to PocketOption WebSocket (LIVE mode)...")
-
-    # Start PocketOption WS in background
+    
+    # Start PocketOption WebSocket
     threading.Thread(
         target=start_pocket_ws,
-        args=(socketio,),   # pass socketio only
+        args=(socketio, POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL),
         daemon=True
     ).start()
 
-    # Wait a few seconds for symbols to load dynamically
-    def delayed_fetcher_start():
-        import time
-        while not get_dynamic_symbols():
-            logging.info("Waiting for dynamic symbols to be loaded from PocketOption...")
-            time.sleep(2)
-        symbols = get_dynamic_symbols()
-        logging.info(f"✅ Dynamic symbols loaded: {len(symbols)} symbols")
-        start_fetching(symbols, TIMEFRAMES, socketio, latest_signals)
-
+    # Run fetching service
     threading.Thread(
-        target=delayed_fetcher_start,
+        target=start_fetching,
+        args=(TIMEFRAMES, socketio, latest_signals),
         daemon=True
     ).start()
 # -----------------------------
