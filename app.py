@@ -5,10 +5,9 @@ from flask_cors import CORS
 from flask_socketio import SocketIO
 from strategy import analyze_candles
 from telegram_utils import send_telegram_message
-from data_fetcher import start_fetching
+from data_fetcher import start_fetching, get_dynamic_symbols  # updated import
 from datetime import datetime, timezone
-from config import SYMBOLS, TIMEFRAMES, TELEGRAM_CHAT_IDS
-from credentials import sessionToken, uid, POCKET_WS_URL, ACCOUNT_URL
+from config import TIMEFRAMES, TELEGRAM_CHAT_IDS
 
 # 👇 Import PocketOption WebSocket
 from pocket_ws import start_pocket_ws  
@@ -34,9 +33,26 @@ MAX_SIGNALS = 50     # Keep only the last 50
 def start_background_workers():
     """Start PocketOption WebSocket + data fetcher in LIVE mode."""
     logging.info("🔌 Connecting to PocketOption WebSocket (LIVE mode)...")
+
+    # Start PocketOption WS in background
     threading.Thread(
         target=start_pocket_ws,
-        args=(socketio, POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL),  # 👈 pass URL + creds
+        args=(socketio,),   # pass socketio only
+        daemon=True
+    ).start()
+
+    # Wait a few seconds for symbols to load dynamically
+    def delayed_fetcher_start():
+        import time
+        while not get_dynamic_symbols():
+            logging.info("Waiting for dynamic symbols to be loaded from PocketOption...")
+            time.sleep(2)
+        symbols = get_dynamic_symbols()
+        logging.info(f"✅ Dynamic symbols loaded: {len(symbols)} symbols")
+        start_fetching(symbols, TIMEFRAMES, socketio, latest_signals)
+
+    threading.Thread(
+        target=delayed_fetcher_start,
         daemon=True
     ).start()
 # -----------------------------
