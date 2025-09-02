@@ -8,6 +8,7 @@ from telegram_utils import send_telegram_message
 from data_fetcher import start_fetching
 from datetime import datetime, timezone
 from config import SYMBOLS, TIMEFRAMES, TELEGRAM_CHAT_IDS
+from credentials import sessionToken, uid, POCKET_WS_URL, ACCOUNT_URL
 
 # 👇 Import PocketOption WebSocket
 from pocket_ws import start_pocket_ws  
