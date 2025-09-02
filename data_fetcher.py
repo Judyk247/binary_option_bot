@@ -16,7 +16,7 @@ market_data = defaultdict(lambda: {"ticks": [], "candles": defaultdict(list)})
 # Supported candle periods in seconds
 CANDLE_PERIODS = [60, 180, 300]  # 1m, 3m, 5m
 
-WS_URL = "wss://events-po.com/socket.io/?EIO=4&transport=websocket"
+PO_WS_URL = "wss://events-po.com/socket.io/?EIO=4&transport=websocket"
 
 # Keep track of last heartbeat time
 last_heartbeat = 0
