@@ -59,7 +59,24 @@ def on_message(ws, message):
         # ✅ Always print the raw message
         print(f"[RAW MESSAGE] {message}")
 
-        # Only parse Socket.IO event messages (42 prefix)
+        # --- Handle special engine/io & namespace open cases ---
+        if message.startswith("0"):
+            # Engine.IO handshake
+            if DEBUG:
+                print("[INFO] Engine.IO handshake received")
+            return
+        if message.startswith("40{"):
+            # Namespace confirmation (safe to ignore, just log)
+            if DEBUG:
+                print("[INFO] Namespace confirmed:", message)
+            return
+        if message == "40":
+            # Plain namespace open
+            if DEBUG:
+                print("[INFO] Namespace opened (40)")
+            return
+
+        # --- Only parse Socket.IO event messages (42 prefix) ---
         if not message.startswith("42"):
             return
 
