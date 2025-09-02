@@ -30,50 +30,45 @@ def on_open(ws):
     ws.send("40")
     print("[SEND] Namespace open (40) ✅")
 
-    time.sleep(1)
-
-    # Step 2: authentication
-    auth_payload = {
-        "sessionToken": sessionToken,
-        "uid": uid,
-        "lang": "en",
-        "currentUrl": ACCOUNT_URL,  # usually "cabinet"
-        "isChart": 1
-    }
-    auth_msg = f'42["auth",{json.dumps(auth_payload)}]'
-    ws.send(auth_msg)
-    print("[SEND] auth message sent ✅")
-
-    time.sleep(1)
-
-    # Step 3: request assets list
-    ws.send('42["getAssets", {}]')
-    print("[SEND] Requested assets list")
-
     # Start keepalive pings
     Thread(target=send_keepalive, args=(ws,), daemon=True).start()
 
 def on_message(ws, message):
     global socketio
     try:
-        # ✅ Always print the raw message
         print(f"[RAW MESSAGE] {message}")
 
-        # --- Handle special engine.io & namespace messages safely ---
         if message.startswith("0"):
             if DEBUG:
                 print("[INFO] Engine.IO handshake received")
             return
+
         if message.startswith("40{"):
             if DEBUG:
                 print("[INFO] Namespace confirmed:", message)
+
+            # ✅ Send auth *after* namespace confirmation
+            auth_payload = {
+                "sessionToken": sessionToken,
+                "uid": uid,
+                "lang": "en",
+                "currentUrl": ACCOUNT_URL,
+                "isChart": 1
+            }
+            auth_msg = f'42["auth",{json.dumps(auth_payload)}]'
+            ws.send(auth_msg)
+            print("[SEND] auth message sent ✅")
+
+            # Request assets after auth
+            ws.send('42["getAssets", {}]')
+            print("[SEND] Requested assets list")
             return
+
         if message == "40":
             if DEBUG:
                 print("[INFO] Namespace opened (40)")
             return
 
-        # --- Only parse Socket.IO event messages (42 prefix) ---
         if not message.startswith("42"):
             return
 
