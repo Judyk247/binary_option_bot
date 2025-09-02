@@ -37,7 +37,7 @@ class PocketOptionClient:
         self.keep_running = False
 
         # WebSocket URL for live/demo Pocket Option
-        self.ws_url = "wss://chat-po.site/cabinet-client/socket.io/?EIO=4&transport=websocket"
+        self.ws_url = "wss://events-po.com/socket.io/?EIO=4&transport=websocket"
 
     def _heartbeat(self):
         """Send ping every 5 seconds to keep connection alive"""
