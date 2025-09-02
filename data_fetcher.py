@@ -115,7 +115,7 @@ def run_ws():
 def get_market_data():
     return market_data
 
-def start_fetching(symbols, timeframes, socketio, latest_signals):
+def start_fetching(timeframes, socketio, latest_signals):
     """
     Continuously fetch Pocket Option candles for all dynamic symbols & timeframes,
     analyze signals, update latest_signals list, and emit to dashboard via socketio.
