@@ -3,7 +3,7 @@ import time
 import websocket
 import threading
 from collections import defaultdict
-from credentials import sessionToken, uid, ACCOUNT_URL
+from credentials import SESSION_TOKEN, USER_ID, ACCOUNT_URL
 from strategy import analyze_candles
 from telegram_utils import send_telegram_message
 from config import TELEGRAM_CHAT_IDS
@@ -14,16 +14,23 @@ from datetime import datetime, timezone
 market_data = defaultdict(lambda: {"ticks": [], "candles": defaultdict(list)})
 
 # Supported candle periods in seconds
-CANDLE_PERIODS = [60, 180, 300]  # 1m, 3m, 5m
+CANDLE_PERIODS = [60, 120, 180, 300]  # 1m, 2m, 3m, 5m
 
-PO_WS_URL = "wss://events-po.com/socket.io/?EIO=4&transport=websocket"
+WS_URL = "wss://chat-po.site/cabinet-client/socket.io/?EIO=4&transport=websocket"
 
 # Keep track of last heartbeat time
 last_heartbeat = 0
 
-# Active trading symbols (dynamically loaded from Pocket Option)
-ACTIVE_SYMBOLS = []
-
+# --- Hardcoded fallback: 40 PocketOption OTC Forex pairs ---
+DEFAULT_SYMBOLS = [
+    "EUR/USD OTC", "GBP/USD OTC", "USD/JPY OTC", "USD/CHF OTC", "AUD/USD OTC", "NZD/USD OTC",
+    "USD/CAD OTC", "EUR/GBP OTC", "EUR/JPY OTC", "GBP/JPY OTC", "AUD/JPY OTC", "NZD/JPY OTC",
+    "EUR/AUD OTC", "EUR/NZD OTC", "EUR/CAD OTC", "EUR/CHF OTC", "GBP/AUD OTC", "GBP/NZD OTC",
+    "GBP/CAD OTC", "GBP/CHF OTC", "AUD/NZD OTC", "AUD/CAD OTC", "AUD/CHF OTC", "NZD/CAD OTC",
+    "NZD/CHF OTC", "CAD/CHF OTC", "CAD/JPY OTC", "CHF/JPY OTC", "EUR/SEK OTC", "EUR/NOK OTC",
+    "USD/SEK OTC", "USD/NOK OTC", "AUD/SGD OTC", "GBP/SGD OTC", "EUR/SGD OTC", "USD/SGD OTC",
+    "EUR/HUF OTC", "USD/HUF OTC", "EUR/PLN OTC", "USD/PLN OTC"
+]
 
 def send_heartbeat(ws):
     global last_heartbeat
@@ -35,23 +42,15 @@ def send_heartbeat(ws):
             print("[HEARTBEAT ERROR]", e)
         time.sleep(5)
 
-
 def on_open(ws):
     print("[OPEN] Connected to PocketOption WebSocket")
 
     # Authenticate with credentials
-    auth_msg = f'42["auth",{{"sessionToken":"{sessionToken}","uid":"{uid}","lang":"en","currentUrl":"{ACCOUNT_URL}","isChart":1}}]'
+    auth_msg = f'42["auth",{{"sessionToken":"{SESSION_TOKEN}","uid":"{USER_ID}","lang":"en","currentUrl":"{ACCOUNT_URL}","isChart":1}}]'
     ws.send(auth_msg)
     print("[SEND] Auth message sent")
 
-    # Request the assets list after auth
-    ws.send('42["get-assets"]')
-    print("[SEND] Requested assets list")
-
-
 def on_message(ws, message):
-    global ACTIVE_SYMBOLS
-
     if message.startswith("42"):
         try:
             data = json.loads(message[2:])
@@ -60,14 +59,18 @@ def on_message(ws, message):
 
             if event == "assets":
                 print("[RECV] Assets list received")
-                ACTIVE_SYMBOLS = [a["symbol"] for a in payload if a.get("enabled")]
-                print(f"[DEBUG] Loaded {len(ACTIVE_SYMBOLS)} active assets")
+                assets = [a["symbol"] for a in payload if a.get("enabled")]
+                print(f"[DEBUG] Assets enabled: {assets[:5]} ... ({len(assets)} total)")
 
-                for asset in ACTIVE_SYMBOLS:
+                if not assets:
+                    print("[FALLBACK] Using hardcoded OTC symbols")
+                    assets = DEFAULT_SYMBOLS
+
+                for asset in assets:
                     ws.send(f'42["subscribe",{{"type":"ticks","asset":"{asset}"}}]')
                     for period in CANDLE_PERIODS:
                         ws.send(f'42["subscribe",{{"type":"candles","asset":"{asset}","period":{period}}}]')
-                print(f"[SUBSCRIBE] Subscribed to {len(ACTIVE_SYMBOLS)} assets 🔥")
+                print(f"[SUBSCRIBE] Subscribed to {len(assets)} assets 🔥")
 
             elif event == "ticks" and payload:
                 asset = payload["asset"]
@@ -90,14 +93,11 @@ def on_message(ws, message):
         except Exception as e:
             print("[ERROR parsing message]", e)
 
-
 def on_close(ws, close_status_code, close_msg):
     print("[CLOSE] Connection closed:", close_status_code, close_msg)
 
-
 def on_error(ws, error):
     print("[ERROR]", error)
-
 
 def run_ws():
     while True:
@@ -112,17 +112,15 @@ def run_ws():
             )
 
             threading.Thread(target=send_heartbeat, args=(ws,), daemon=True).start()
-            ws.run_forever()
 
+            ws.run_forever()
         except Exception as e:
             print("[FATAL ERROR]", e)
         print("⏳ Reconnecting in 5 seconds...")
         time.sleep(5)
 
-
 def get_market_data():
     return market_data
-
 
 def start_fetching(symbols, timeframes, socketio, latest_signals):
     """
@@ -130,8 +128,7 @@ def start_fetching(symbols, timeframes, socketio, latest_signals):
     analyze signals, update latest_signals list, and emit to dashboard via socketio.
     """
     while True:
-        active_symbols = symbols or ACTIVE_SYMBOLS  # use live-loaded symbols
-        for symbol in active_symbols:
+        for symbol in (symbols or DEFAULT_SYMBOLS):
             for tf in timeframes:
                 candles = market_data[symbol]["candles"].get(tf_to_seconds(tf), [])
                 if not candles:
@@ -139,7 +136,7 @@ def start_fetching(symbols, timeframes, socketio, latest_signals):
                 df = pd.DataFrame(candles)
                 # Run your strategy (expects analyze_candles to return tuple: signal, confidence)
                 result = analyze_candles(df)
-
+                
                 if isinstance(result, tuple):
                     signal_value, confidence = result
                 else:
@@ -149,7 +146,7 @@ def start_fetching(symbols, timeframes, socketio, latest_signals):
                 signal_data = {
                     "symbol": symbol,
                     "signal": signal_value if signal_value else "HOLD",
-                    "confidence": confidence,
+                    "confidence": confidence,  # <-- added
                     "time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
                     "timeframe": tf
                 }
@@ -172,10 +169,8 @@ def start_fetching(symbols, timeframes, socketio, latest_signals):
 
         time.sleep(5)  # Check every 5 seconds
 
-
 def tf_to_seconds(tf):
     return int(tf[:-1]) * 60
-
 
 if __name__ == "__main__":
     run_ws()
