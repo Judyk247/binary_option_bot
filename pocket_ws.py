@@ -127,7 +127,7 @@ def start_pocket_ws(socketio, POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL):
 
     t = threading.Thread(
         target=run_ws,
-        args=(POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL),
+        args=(socketio, POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL),
         daemon=True
     )
     t.start()
