@@ -3,7 +3,7 @@ import time
 import websocket
 import threading
 from collections import defaultdict
-from credentials import SESSION_TOKEN, USER_ID, ACCOUNT_URL
+from credentials import sessionToken, uid, ACCOUNT_URL
 from strategy import analyze_candles
 from telegram_utils import send_telegram_message
 from config import TELEGRAM_CHAT_IDS
@@ -14,9 +14,9 @@ from datetime import datetime, timezone
 market_data = defaultdict(lambda: {"ticks": [], "candles": defaultdict(list)})
 
 # Supported candle periods in seconds
-CANDLE_PERIODS = [60, 120, 180, 300]  # 1m, 2m, 3m, 5m
+CANDLE_PERIODS = [60, 180, 300]  # 1m, 3m, 5m
 
-WS_URL = "wss://chat-po.site/cabinet-client/socket.io/?EIO=4&transport=websocket"
+PO_WS_URL = "wss://events-po.com/socket.io/?EIO=4&transport=websocket"
 
 # Keep track of last heartbeat time
 last_heartbeat = 0
@@ -46,7 +46,7 @@ def on_open(ws):
     print("[OPEN] Connected to PocketOption WebSocket")
 
     # Authenticate with credentials
-    auth_msg = f'42["auth",{{"sessionToken":"{SESSION_TOKEN}","uid":"{USER_ID}","lang":"en","currentUrl":"{ACCOUNT_URL}","isChart":1}}]'
+    auth_msg = f'42["auth",{{"sessionToken":"{sessionToken}","uid":"{uid}","lang":"en","currentUrl":"{ACCOUNT_URL}","isChart":1}}]'
     ws.send(auth_msg)
     print("[SEND] Auth message sent")
 
