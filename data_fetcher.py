@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 market_data = defaultdict(lambda: {"ticks": [], "candles": defaultdict(list)})
 
 # Supported candle periods in seconds
-CANDLE_PERIODS = [60, 120, 180, 300]  # 1m, 2m, 3m, 5m
+CANDLE_PERIODS = [60, 120, 180, 300]  # 1m, 3m, 5m
 
 WS_URL = "wss://events-po.com/socket.io/?EIO=4&transport=websocket"
 
