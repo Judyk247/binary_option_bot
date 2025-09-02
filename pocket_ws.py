@@ -129,7 +129,7 @@ def on_close(ws, close_status_code, close_msg):
 def on_error(ws, error):
     print("[ERROR]", error)
 
-def run_ws():
+def run_ws(socketio, POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL):
     while True:
         try:
             ws = websocket.WebSocketApp(
