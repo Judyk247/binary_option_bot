@@ -38,16 +38,18 @@ def on_message(ws, message):
     try:
         print(f"[RAW MESSAGE] {message}")
 
+        # Engine.IO handshake
         if message.startswith("0"):
             if DEBUG:
                 print("[INFO] Engine.IO handshake received")
             return
 
+        # Namespace open / confirmation
         if message.startswith("40"):
             if DEBUG:
                 print("[INFO] Namespace confirmed:", message)
 
-            # ✅ Send auth *after* namespace confirmation
+            # ✅ Send auth
             auth_payload = {
                 "sessionToken": sessionToken,
                 "uid": uid,
@@ -62,13 +64,18 @@ def on_message(ws, message):
             # Request assets after auth
             ws.send('42["getAssets", {}]')
             print("[SEND] Requested assets list")
+
+            # Optional: send a ping immediately to avoid timeout
+            ws.send("2")
             return
 
-        if message == "40":
+        # "41" = ack, just log it
+        if message.startswith("41"):
             if DEBUG:
-                print("[INFO] Namespace opened (40)")
+                print("[INFO] ACK received:", message)
             return
 
+        # Only process events starting with "42"
         if not message.startswith("42"):
             return
 
@@ -122,7 +129,7 @@ def on_message(ws, message):
 
     except Exception as e:
         print("[WS ERROR parsing message]", e)
-
+        
 def on_close(ws, close_status_code, close_msg):
     print("[CLOSE] Connection closed:", close_status_code, close_msg)
 
