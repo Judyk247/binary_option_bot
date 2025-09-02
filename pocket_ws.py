@@ -146,11 +146,14 @@ def run_ws():
         print("⏳ Reconnecting in 5 seconds...")
         time.sleep(5)
 
-def start_pocket_ws(sio):
-    global socketio
-    socketio = sio
-    Thread(target=run_ws, args=(socketio, POCKET_WS_URL, sessionToken, uid, POCKET_ACCOUNT_URL), daemon=True).start()
-    
+def start_pocket_ws(socketio, POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL):
+    global sio, POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL
+    sio = socketio
+    POCKET_WS_URL = POCKET_WS_URL
+    sessionToken = sessionToken
+    uid = uid
+    POCKET_ACCOUNT_URL = ACCOUNT_URL
 
+    Thread(target=run_ws, args=(soketio, POCKET_WS_URL, sessionToken, uid, POCKET_ACCOUNT_URL), daemon=True).start()
 if __name__ == "__main__":
     print("⚠️ Run this only from app.py, not directly.")
