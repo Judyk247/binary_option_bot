@@ -24,6 +24,7 @@ last_heartbeat = 0
 # Dynamically loaded symbols from Pocket Option
 symbols = []
 
+
 def send_heartbeat(ws):
     global last_heartbeat
     while True:
@@ -34,6 +35,7 @@ def send_heartbeat(ws):
             print("[HEARTBEAT ERROR]", e)
         time.sleep(5)
 
+
 def on_open(ws):
     print("[OPEN] Connected to PocketOption WebSocket")
 
@@ -41,6 +43,7 @@ def on_open(ws):
     auth_msg = f'42["auth",{{"sessionToken":"{sessionToken}","uid":"{uid}","lang":"en","currentUrl":"{ACCOUNT_URL}","isChart":1}}]'
     ws.send(auth_msg)
     print("[SEND] Auth message sent")
+
 
 def on_message(ws, message):
     global symbols
@@ -50,7 +53,6 @@ def on_message(ws, message):
             event = data[0]
             payload = data[1] if len(data) > 1 else None
 
-            # --- Load assets dynamically ---
             if event == "assets" and payload:
                 print("[RECV] Assets list received")
                 symbols = [a["symbol"] for a in payload if a.get("enabled")]
@@ -63,13 +65,11 @@ def on_message(ws, message):
                         ws.send(f'42["subscribe",{{"type":"candles","asset":"{asset}","period":{period}}}]')
                 print(f"[SUBSCRIBE] Subscribed to {len(symbols)} assets 🔥")
 
-            # --- Update ticks ---
             elif event == "ticks" and payload:
                 asset = payload["asset"]
                 tick = {"time": payload["time"], "price": payload["price"]}
                 market_data[asset]["ticks"].append(tick)
 
-            # --- Update candles ---
             elif event == "candles" and payload:
                 asset = payload["asset"]
                 period = payload["period"]
@@ -86,11 +86,14 @@ def on_message(ws, message):
         except Exception as e:
             print("[ERROR parsing message]", e)
 
+
 def on_close(ws, close_status_code, close_msg):
     print("[CLOSE] Connection closed:", close_status_code, close_msg)
 
+
 def on_error(ws, error):
     print("[ERROR]", error)
+
 
 def run_ws():
     while True:
@@ -105,29 +108,42 @@ def run_ws():
             )
 
             threading.Thread(target=send_heartbeat, args=(ws,), daemon=True).start()
-
             ws.run_forever()
         except Exception as e:
             print("[FATAL ERROR]", e)
         print("⏳ Reconnecting in 5 seconds...")
         time.sleep(5)
 
+
 def get_market_data():
     return market_data
 
-def start_fetching(timeframes, socketio, latest_signals):
+
+def get_dynamic_symbols():
     """
-    Continuously fetch Pocket Option candles for all dynamic symbols & timeframes,
-    analyze signals, update latest_signals list, and emit to dashboard via socketio.
+    Return the latest dynamically loaded symbols.
+    Waits until at least one symbol is loaded.
     """
     global symbols
+    wait_time = 0
+    while not symbols and wait_time < 10:
+        time.sleep(0.5)
+        wait_time += 0.5
+    return symbols.copy()
+
+
+def start_fetching(timeframes, socketio, latest_signals):
+    """
+    Continuously fetch Pocket Option candles for dynamic symbols & timeframes,
+    analyze signals, update latest_signals list, and emit to dashboard via socketio.
+    """
     while True:
-        for symbol in symbols:
+        current_symbols = get_dynamic_symbols()
+        for symbol in current_symbols:
             for tf in timeframes:
                 candles = market_data[symbol]["candles"].get(tf_to_seconds(tf), [])
                 if not candles:
                     continue
-
                 df = pd.DataFrame(candles)
                 result = analyze_candles(df)
 
@@ -135,7 +151,7 @@ def start_fetching(timeframes, socketio, latest_signals):
                     signal_value, confidence = result
                 else:
                     signal_value = result
-                    confidence = 100  # fallback
+                    confidence = 100  # fallback default
 
                 signal_data = {
                     "symbol": symbol,
@@ -145,14 +161,14 @@ def start_fetching(timeframes, socketio, latest_signals):
                     "timeframe": tf
                 }
 
-                # Update latest_signals for dashboard
+                # Update latest_signals list for dashboard
                 latest_signals[:] = [s for s in latest_signals if not (s["symbol"] == symbol and s["timeframe"] == tf)]
                 latest_signals.append(signal_data)
 
                 # Emit live update to frontend
                 socketio.emit("new_signal", signal_data)
 
-                # Telegram alert only for BUY/SELL
+                # Send Telegram alert only if there is a BUY/SELL signal
                 if signal_value in ["BUY", "SELL"]:
                     for chat_id in TELEGRAM_CHAT_IDS:
                         if chat_id:
@@ -163,8 +179,10 @@ def start_fetching(timeframes, socketio, latest_signals):
 
         time.sleep(5)
 
+
 def tf_to_seconds(tf):
     return int(tf[:-1]) * 60
+
 
 if __name__ == "__main__":
     run_ws()
