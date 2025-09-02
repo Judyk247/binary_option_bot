@@ -43,7 +43,7 @@ def on_message(ws, message):
                 print("[INFO] Engine.IO handshake received")
             return
 
-        if message.startswith("40{"):
+        if message.startswith("40"):
             if DEBUG:
                 print("[INFO] Namespace confirmed:", message)
 
@@ -163,5 +163,6 @@ def start_pocket_ws(socketio, POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL):
         args=(socketio, POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL),
         daemon=True
     ).start()
+
 if __name__ == "__main__":
     print("⚠️ Run this only from app.py, not directly.")
