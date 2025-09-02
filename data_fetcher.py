@@ -50,7 +50,8 @@ def on_message(ws, message):
             event = data[0]
             payload = data[1] if len(data) > 1 else None
 
-            if event == "assets":
+            # --- Load assets dynamically ---
+            if event == "assets" and payload:
                 print("[RECV] Assets list received")
                 symbols = [a["symbol"] for a in payload if a.get("enabled")]
                 print(f"[DEBUG] Loaded {len(symbols)} enabled assets")
@@ -62,11 +63,13 @@ def on_message(ws, message):
                         ws.send(f'42["subscribe",{{"type":"candles","asset":"{asset}","period":{period}}}]')
                 print(f"[SUBSCRIBE] Subscribed to {len(symbols)} assets 🔥")
 
+            # --- Update ticks ---
             elif event == "ticks" and payload:
                 asset = payload["asset"]
                 tick = {"time": payload["time"], "price": payload["price"]}
                 market_data[asset]["ticks"].append(tick)
 
+            # --- Update candles ---
             elif event == "candles" and payload:
                 asset = payload["asset"]
                 period = payload["period"]
@@ -112,9 +115,9 @@ def run_ws():
 def get_market_data():
     return market_data
 
-def start_fetching(timeframes, socketio, latest_signals):
+def start_fetching(symbols, timeframes, socketio, latest_signals):
     """
-    Continuously fetch Pocket Option candles for symbols & timeframes,
+    Continuously fetch Pocket Option candles for all dynamic symbols & timeframes,
     analyze signals, update latest_signals list, and emit to dashboard via socketio.
     """
     global symbols
@@ -124,6 +127,7 @@ def start_fetching(timeframes, socketio, latest_signals):
                 candles = market_data[symbol]["candles"].get(tf_to_seconds(tf), [])
                 if not candles:
                     continue
+
                 df = pd.DataFrame(candles)
                 result = analyze_candles(df)
 
@@ -131,7 +135,7 @@ def start_fetching(timeframes, socketio, latest_signals):
                     signal_value, confidence = result
                 else:
                     signal_value = result
-                    confidence = 100  # fallback default
+                    confidence = 100  # fallback
 
                 signal_data = {
                     "symbol": symbol,
@@ -141,14 +145,14 @@ def start_fetching(timeframes, socketio, latest_signals):
                     "timeframe": tf
                 }
 
-                # Update latest_signals list for dashboard
+                # Update latest_signals for dashboard
                 latest_signals[:] = [s for s in latest_signals if not (s["symbol"] == symbol and s["timeframe"] == tf)]
                 latest_signals.append(signal_data)
 
                 # Emit live update to frontend
                 socketio.emit("new_signal", signal_data)
 
-                # Send Telegram alert only if there is a BUY/SELL signal
+                # Telegram alert only for BUY/SELL
                 if signal_value in ["BUY", "SELL"]:
                     for chat_id in TELEGRAM_CHAT_IDS:
                         if chat_id:
