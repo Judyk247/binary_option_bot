@@ -146,7 +146,7 @@ def run_ws():
         print("⏳ Reconnecting in 5 seconds...")
         time.sleep(5)
 
- def start_pocket_ws(socketio, POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL):
+def start_pocket_ws(socketio, POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL):
     """
     Starts the Pocket Option WebSocket in a separate thread.
     
