@@ -110,7 +110,7 @@ def run_ws(socketio, POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL):
                 header=["Origin: https://m.pocketoption.com"]
             )
 
-            threading.Thread(target=send_heartbeat, args=(ws), daemon=True).start()
+            threading.Thread(target=send_heartbeat, args=(ws,), daemon=True).start()
             ws.run_forever()
         except Exception as e:
             logging.error(f"[FATAL ERROR] {e}")
