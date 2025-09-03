@@ -15,7 +15,7 @@ symbols = []
 socketio_instance = None
 
 # Heartbeat ping interval
-PING_INTERVAL = 20
+PING_INTERVAL = 10
 
 
 def send_heartbeat(ws):
