@@ -57,7 +57,7 @@ def on_message(ws, message):
     # Step 2: After handshake, server confirms namespace
     if message == "40":
         # Send probe (41) after a short delay
-        time.sleep(0.5)  # 500ms delay
+        time.sleep(1)  # 1 second delay
         ws.send("41")
         logging.info("[SEND] Probe (41) ✅")
         return
@@ -65,7 +65,7 @@ def on_message(ws, message):
     # Step 3: When probe is acknowledged, send auth
     if message == "41":
         # Delay before sending auth to allow server processing
-        time.sleep(0.5)  # 500ms delay
+        time.sleep(1)  # 1 second delay
         auth_payload = [
             "auth",
             {
@@ -80,11 +80,11 @@ def on_message(ws, message):
         logging.info("[SEND] Auth message sent ✅")
 
         # Step 4: Request assets list after auth with slight delay
-        time.sleep(0.5)  # 500ms delay
+        time.sleep(1)  # 1 second delay
         ws.send('42["assets/get-assets",{}]')
         logging.info("[SEND] Requested assets list ✅")
 
-        # ✅ Start heartbeat AFTER auth is sent
+        # ✅ Start heartbeat AFTER auth and assets request are sent
         threading.Thread(target=send_heartbeat, args=(ws,), daemon=True).start()
         return
 
@@ -105,6 +105,7 @@ def on_message(ws, message):
 
         except Exception as e:
             logging.error(f"[ERROR] Failed to parse event: {e}")
+
 
 def on_close(ws, close_status_code, close_msg):
     logging.warning(f"[CLOSE] Connection closed: {close_status_code} - {close_msg}")
