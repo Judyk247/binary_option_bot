@@ -1,160 +1,100 @@
 import json
 import time
-import websocket
 import threading
 import logging
+import socketio
 
 from credentials import uid, sessionToken, ACCOUNT_URL
 
-POCKET_WS_URL = "wss://events-po.com/socket.io/?EIO=4&transport=websocket"
+# Pocket Option Socket.IO URL
+POCKET_WS_URL = "https://events-po.com"
 
-# Dynamically loaded symbols
+# Global dynamic symbols
 symbols = []
 
 # SocketIO instance injected from app.py
 socketio_instance = None
 
-# Heartbeat ping interval
+# Heartbeat interval (not needed explicitly with python-socketio, but kept for logging)
 PING_INTERVAL = 10
 
-
-def send_heartbeat(ws):
-    """Send periodic ping to keep connection alive."""
-    while True:
-        try:
-            if ws.sock and ws.sock.connected:
-                ws.send("2")  # Standard Socket.IO ping
-                logging.debug("[PING] Keep-alive sent")
-            else:
-                logging.warning("[PING] WebSocket not connected, skipping ping...")
-                break
-        except Exception as e:
-            logging.error(f"[PING ERROR] {e}")
-            break
-        time.sleep(PING_INTERVAL)
+# Socket.IO client
+sio = socketio.Client(logger=False, engineio_logger=False, reconnection=True, reconnection_attempts=0, reconnection_delay=5)
 
 
-def on_open(ws):
-    logging.info("[OPEN] Connected to Pocket Option WebSocket")
-
-    # Step 1: Send namespace open (40) only
-    ws.send("40")
-    logging.info("[SEND] Namespace open (40) ✅")
-
-    # ✅ Do NOT start heartbeat yet; wait until auth is sent
-
-
-def on_message(ws, message):
+def update_symbols(new_symbols):
     global symbols
-
-    # ✅ Debug: print every raw WebSocket message
-    logging.debug(f"[RAW MESSAGE] {message}")
-
-    # Handle Socket.IO heartbeat
-    if message == "3":
-        return
-
-    # Step 2: After handshake, server confirms namespace
-    if message == "40":
-        # Send probe (41) after a short delay
-        time.sleep(1)  # 1 second delay
-        ws.send("41")
-        logging.info("[SEND] Probe (41) ✅")
-        return
-
-    # Step 3: When probe is acknowledged, send auth
-    if message == "41":
-        # Delay before sending auth to allow server processing
-        time.sleep(1)  # 1 second delay
-        auth_payload = [
-            "auth",
-            {
-                "sessionToken": sessionToken,
-                "uid": uid,
-                "lang": "en",
-                "currentUrl": "cabinet/demo-quick-high-low",
-                "isChart": 1
-            }
-        ]
-        ws.send("42" + json.dumps(auth_payload))
-        logging.info("[SEND] Auth message sent ✅")
-
-        # Step 4: Request assets list after auth with slight delay
-        time.sleep(1)  # 1 second delay
-        ws.send('42["assets/get-assets",{}]')
-        logging.info("[SEND] Requested assets list ✅")
-
-        # ✅ Start heartbeat AFTER auth and assets request are sent
-        threading.Thread(target=send_heartbeat, args=(ws,), daemon=True).start()
-        return
-
-    # Custom events
-    if message.startswith("42"):
-        try:
-            payload = json.loads(message[2:])
-            event, data = payload[0], payload[1]
-
-            if event == "assets":
-                logging.info(f"[EVENT] {event} => {len(data)} assets loaded")
-                symbols = [a["symbol"] for a in data if a.get("enabled")]
-                logging.info(f"[DEBUG] Dynamic symbols updated: {symbols}")
-
-            # Emit symbols update via SocketIO if needed
-            if socketio_instance:
-                socketio_instance.emit("symbols_update", {"symbols": symbols})
-
-        except Exception as e:
-            logging.error(f"[ERROR] Failed to parse event: {e}")
+    symbols = new_symbols
+    logging.info(f"[SYMBOLS] Updated dynamic symbols: {symbols}")
+    if socketio_instance:
+        socketio_instance.emit("symbols_update", {"symbols": symbols})
 
 
-def on_close(ws, close_status_code, close_msg):
-    logging.warning(f"[CLOSE] Connection closed: {close_status_code} - {close_msg}")
+@sio.event
+def connect():
+    logging.info("[CONNECT] Connected to Pocket Option Socket.IO")
+
+    # Step 1: Auth after connection
+    auth_payload = {
+        "sessionToken": sessionToken,
+        "uid": uid,
+        "lang": "en",
+        "currentUrl": "cabinet/demo-quick-high-low",
+        "isChart": 1
+    }
+    sio.emit("auth", auth_payload)
+    logging.info("[AUTH] Auth message sent ✅")
+
+    # Step 2: Request assets list after short delay
+    time.sleep(0.5)
+    sio.emit("assets/get-assets", {})
+    logging.info("[REQUEST] Requested assets list ✅")
 
 
-def on_error(ws, error):
-    logging.error(f"[ERROR] {error}")
+@sio.event
+def disconnect():
+    logging.warning("[DISCONNECT] Connection closed")
 
 
-def run_ws(socketio, POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL):
-    while True:
-        try:
-            ws = websocket.WebSocketApp(
-                POCKET_WS_URL,
-                on_open=on_open,
-                on_message=on_message,
-                on_close=on_close,
-                on_error=on_error,
-                header=["Origin: https://m.pocketoption.com"]
-            )
+@sio.on("assets")
+def handle_assets(data):
+    """Receive assets list from Pocket Option"""
+    try:
+        enabled_assets = [a["symbol"] for a in data if a.get("enabled")]
+        update_symbols(enabled_assets)
+        logging.info(f"[EVENT] Assets loaded: {len(enabled_assets)}")
+    except Exception as e:
+        logging.error(f"[ERROR] Failed to parse assets event: {e}")
 
-            threading.Thread(target=send_heartbeat, args=(ws,), daemon=True).start()
-            ws.run_forever()
-        except Exception as e:
-            logging.error(f"[FATAL ERROR] {e}")
+
+def run_pocket_ws(socketio_from_app):
+    global socketio_instance
+    socketio_instance = socketio_from_app
+
+    try:
+        logging.info("🔌 Connecting to Pocket Option Socket.IO...")
+        sio.connect(POCKET_WS_URL, transports=["websocket"], headers={"Origin": "https://m.pocketoption.com"})
+        sio.wait()
+    except Exception as e:
+        logging.error(f"[FATAL ERROR] {e}")
         logging.info("⏳ Reconnecting in 5 seconds...")
         time.sleep(5)
+        run_pocket_ws(socketio_from_app)
 
 
-def start_pocket_ws(socketio, POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL):
+def start_pocket_ws(socketio_from_app):
     """
-    Starts Pocket Option WebSocket in a separate thread.
+    Start Pocket Option Socket.IO in a separate thread.
     """
-    global socketio_instance
-    socketio_instance = socketio
-
-    t = threading.Thread(
-        target=run_ws,
-        args=(socketio, POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL),
-        daemon=True
-    )
+    t = threading.Thread(target=run_pocket_ws, args=(socketio_from_app,), daemon=True)
     t.start()
 
 
 def get_dynamic_symbols():
-    """Return the latest dynamic symbols for use by data_fetcher."""
+    """Return the latest dynamic symbols"""
     global symbols
     return symbols
 
 
 if __name__ == "__main__":
-    print("⚠️ Run this only from app.py, not directly.")
+    logging.info("⚠️ Run this only from app.py, not directly.")
