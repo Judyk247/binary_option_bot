@@ -143,8 +143,22 @@ def start_fetching(timeframes, socketio_from_app, latest_signals):
         for symbol in current_symbols:
             for tf in timeframes:
                 candles = market_data[symbol]["candles"].get(tf_to_seconds(tf), [])
+                
                 if not candles:
+                    # Emit a default HOLD signal for symbols without candles yet
+                    signal_data = {
+                        "symbol": symbol,
+                        "signal": "HOLD",
+                        "confidence": 0,
+                        "time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+                        "timeframe": tf
+                    }
+                    # Update latest_signals
+                    latest_signals[:] = [s for s in latest_signals if not (s["symbol"] == symbol and s["timeframe"] == tf)]
+                    latest_signals.append(signal_data)
+                    socketio_from_app.emit("new_signal", signal_data)
                     continue
+
                 df = pd.DataFrame(candles)
                 result = analyze_candles(df)
 
