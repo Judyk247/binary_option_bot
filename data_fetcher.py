@@ -70,20 +70,34 @@ def disconnect():
 def handle_assets(data):
     """Receive assets list from Pocket Option and subscribe to ticks/candles."""
     try:
-        enabled_assets = [a["symbol"] for a in data if a.get("enabled")]
+        # 🔎 Raw assets payload (visible only at DEBUG level)
+        try:
+            logging.debug("[EVENT] Raw assets payload: %s", json.dumps(data, ensure_ascii=False)[:2000])
+        except Exception:
+            logging.debug("[EVENT] Raw assets payload (repr): %r", data)
+
+        enabled_assets = [a.get("symbol") for a in data if a.get("enabled") and a.get("symbol")]
+        
+        if not enabled_assets:
+            logging.warning("[EVENT] No enabled assets found.")
+            return
+
         update_symbols(enabled_assets)
         logging.info(f"[EVENT] Assets loaded: {len(enabled_assets)}")
 
         # Subscribe to ticks and candles for each asset
         for asset in enabled_assets:
-            sio.emit("subscribe", {"type": "ticks", "asset": asset})
-            for period in CANDLE_PERIODS:
-                sio.emit("subscribe", {"type": "candles", "asset": asset, "period": period})
+            try:
+                sio.emit("subscribe", {"type": "ticks", "asset": asset})
+                for period in CANDLE_PERIODS:
+                    sio.emit("subscribe", {"type": "candles", "asset": asset, "period": period})
+            except Exception as sub_err:
+                logging.error(f"[ERROR] Subscription failed for {asset}: {sub_err}")
+
         logging.info(f"[SUBSCRIBE] Subscribed to {len(enabled_assets)} assets 🔥")
 
     except Exception as e:
         logging.error(f"[ERROR] Failed to handle assets: {e}")
-
 
 @sio.on("ticks")
 def handle_ticks(data):
