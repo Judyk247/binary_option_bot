@@ -98,7 +98,7 @@ def on_error(ws, error):
     logging.error(f"[ERROR] {error}")
 
 
-def run_ws(POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL):
+def run_ws(socketio, POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL):
     while True:
         try:
             ws = websocket.WebSocketApp(
@@ -110,7 +110,7 @@ def run_ws(POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL):
                 header=["Origin: https://m.pocketoption.com"]
             )
 
-            threading.Thread(target=send_heartbeat, args=(ws,), daemon=True).start()
+            threading.Thread(target=send_heartbeat, args=(socketio, POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL), daemon=True).start()
             ws.run_forever()
         except Exception as e:
             logging.error(f"[FATAL ERROR] {e}")
