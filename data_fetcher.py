@@ -38,48 +38,82 @@ def send_heartbeat(ws):
 
 def on_open(ws):
     print("[OPEN] Connected to PocketOption WebSocket")
-
-    # Authenticate with credentials
-    auth_msg = f'42["auth",{{"sessionToken":"{sessionToken}","uid":"{uid}","lang":"en","currentUrl":"cabinet","isChart":1}}]'
-    ws.send(auth_msg)
-    print("[SEND] Auth message sent")
+    # Step 1: Send namespace open (40)
+    ws.send("40")
+    print("[SEND] Namespace open (40) ✅")
+    # Heartbeat thread will start after auth is sent
 
 
 def on_message(ws, message):
     global symbols
+
+    # Debug raw message
+    logging.debug(f"[RAW MESSAGE] {message}")
+
+    # Socket.IO heartbeat
+    if message == "3":
+        return
+
+    # Step 2: After namespace confirmation, send probe (41)
+    if message == "40":
+        time.sleep(0.5)  # 500ms delay
+        ws.send("41")
+        print("[SEND] Probe (41) ✅")
+        return
+
+    # Step 3: After probe acknowledged, send staged auth (42)
+    if message == "41":
+        time.sleep(0.5)
+        auth_payload = [
+            "auth",
+            {
+                "sessionToken": sessionToken,
+                "uid": uid,
+                "lang": "en",
+                "currentUrl": "cabinet/demo-quick-high-low",
+                "isChart": 1
+            }
+        ]
+        ws.send("42" + json.dumps(auth_payload))
+        print("[SEND] Auth message sent ✅")
+        return
+
+    # Step 4: Handle server events
     if message.startswith("42"):
         try:
-            data = json.loads(message[2:])
-            event = data[0]
-            payload = data[1] if len(data) > 1 else None
+            payload = json.loads(message[2:])
+            event, data = payload[0], payload[1] if len(payload) > 1 else None
 
-            if event == "assets" and payload:
-                print("[RECV] Assets list received")
-                symbols = [a["symbol"] for a in payload if a.get("enabled")]
-                print(f"[DEBUG] Loaded {len(symbols)} enabled assets")
+            if event == "assets" and data:
+                print("[EVENT] Assets list received")
+                symbols = [a["symbol"] for a in data if a.get("enabled")]
+                print(f"[DEBUG] {len(symbols)} enabled assets loaded")
 
-                # Subscribe to all symbols dynamically
+                # Start subscriptions after assets confirmed
                 for asset in symbols:
                     ws.send(f'42["subscribe",{{"type":"ticks","asset":"{asset}"}}]')
                     for period in CANDLE_PERIODS:
                         ws.send(f'42["subscribe",{{"type":"candles","asset":"{asset}","period":{period}}}]')
                 print(f"[SUBSCRIBE] Subscribed to {len(symbols)} assets 🔥")
 
-            elif event == "ticks" and payload:
-                asset = payload["asset"]
-                tick = {"time": payload["time"], "price": payload["price"]}
+                # Start heartbeat AFTER subscriptions
+                threading.Thread(target=send_heartbeat, args=(ws,), daemon=True).start()
+
+            elif event == "ticks" and data:
+                asset = data["asset"]
+                tick = {"time": data["time"], "price": data["price"]}
                 market_data[asset]["ticks"].append(tick)
 
-            elif event == "candles" and payload:
-                asset = payload["asset"]
-                period = payload["period"]
+            elif event == "candles" and data:
+                asset = data["asset"]
+                period = data["period"]
                 candle = {
-                    "time": payload["time"],
-                    "open": payload["open"],
-                    "high": payload["high"],
-                    "low": payload["low"],
-                    "close": payload["close"],
-                    "volume": payload["volume"],
+                    "time": data["time"],
+                    "open": data["open"],
+                    "high": data["high"],
+                    "low": data["low"],
+                    "close": data["close"],
+                    "volume": data["volume"],
                 }
                 market_data[asset]["candles"][period].append(candle)
 
