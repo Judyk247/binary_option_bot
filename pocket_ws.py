@@ -37,7 +37,7 @@ def send_heartbeat(ws):
 def on_open(ws):
     logging.info("[OPEN] Connected to Pocket Option WebSocket")
 
-    # Step 1: Send namespace open (40)
+    # Step 1: Send namespace open (40) only
     ws.send("40")
     logging.info("[SEND] Namespace open (40) ✅")
 
