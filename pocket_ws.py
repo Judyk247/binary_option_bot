@@ -15,11 +15,12 @@ symbols = []
 # SocketIO instance injected from app.py
 socketio_instance = None
 
+# Heartbeat interval (not needed explicitly with python-socketio, but kept for logging)
+PING_INTERVAL = 10
+
 # Socket.IO client
 sio = socketio.Client(logger=False, engineio_logger=False, reconnection=True, reconnection_attempts=0, reconnection_delay=5)
 
-# Store market data locally (for reference, optional)
-market_data = {}
 
 def update_symbols(new_symbols):
     global symbols
@@ -33,18 +34,18 @@ def update_symbols(new_symbols):
 def connect():
     logging.info("[CONNECT] Connected to Pocket Option Socket.IO")
 
-    # Auth after connection
+    # Step 1: Auth after connection
     auth_payload = {
         "sessionToken": sessionToken,
         "uid": uid,
         "lang": "en",
-        "currentUrl": "cabinet",
+        "currentUrl": "cabinet/demo-quick-high-low",
         "isChart": 1
     }
     sio.emit("auth", auth_payload)
     logging.info("[AUTH] Auth message sent ✅")
 
-    # Request assets list
+    # Step 2: Request assets list after short delay
     time.sleep(0.5)
     sio.emit("assets/get-assets", {})
     logging.info("[REQUEST] Requested assets list ✅")
@@ -57,38 +58,13 @@ def disconnect():
 
 @sio.on("assets")
 def handle_assets(data):
-    """Receive assets list and subscribe to ticks & candles."""
+    """Receive assets list from Pocket Option"""
     try:
         enabled_assets = [a["symbol"] for a in data if a.get("enabled")]
         update_symbols(enabled_assets)
         logging.info(f"[EVENT] Assets loaded: {len(enabled_assets)}")
-
-        # Subscribe to ticks and candles for each asset
-        for asset in enabled_assets:
-            sio.emit("subscribe", {"type": "ticks", "asset": asset})
-            for period in [60, 180, 300]:  # 1m, 3m, 5m
-                sio.emit("subscribe", {"type": "candles", "asset": asset, "period": period})
-        logging.info(f"[SUBSCRIBE] Subscribed to {len(enabled_assets)} assets 🔥")
-
     except Exception as e:
-        logging.error(f"[ERROR] Failed to handle assets: {e}")
-
-
-@sio.on("ticks")
-def handle_ticks(data):
-    """Optional local store for ticks."""
-    asset = data.get("asset")
-    if asset:
-        market_data.setdefault(asset, {}).setdefault("ticks", []).append({"time": data["time"], "price": data["price"]})
-
-
-@sio.on("candles")
-def handle_candles(data):
-    """Optional local store for candles."""
-    asset = data.get("asset")
-    period = data.get("period")
-    if asset and period:
-        market_data.setdefault(asset, {}).setdefault("candles", {}).setdefault(period, []).append(data)
+        logging.error(f"[ERROR] Failed to parse assets event: {e}")
 
 
 def run_pocket_ws(socketio_from_app):
@@ -107,7 +83,9 @@ def run_pocket_ws(socketio_from_app):
 
 
 def start_pocket_ws(socketio_from_app):
-    """Start Pocket Option Socket.IO in a separate thread."""
+    """
+    Start Pocket Option Socket.IO in a separate thread.
+    """
     t = threading.Thread(target=run_pocket_ws, args=(socketio_from_app,), daemon=True)
     t.start()
 
