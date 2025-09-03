@@ -37,27 +37,9 @@ def send_heartbeat(ws):
 def on_open(ws):
     logging.info("[OPEN] Connected to Pocket Option WebSocket")
 
-    # Send namespace open
+    # Step 1: Send namespace open (40)
     ws.send("40")
     logging.info("[SEND] Namespace open (40) ✅")
-
-    # Send authentication
-    auth_payload = [
-        "auth",
-        {
-            "sessionToken": sessionToken,
-            "uid": uid,
-            "lang": "en",
-            "currentUrl": "cabinet",
-            "isChart": 1
-        }
-    ]
-    ws.send("42" + json.dumps(auth_payload))
-    logging.info("[SEND] Auth message sent ✅")
-
-    # Request assets list
-    ws.send('42["assets/get-assets",{}]')
-    logging.info("[SEND] Requested assets list ✅")
 
     # ✅ Start heartbeat AFTER successful open
     threading.Thread(target=send_heartbeat, args=(ws,), daemon=True).start()
@@ -66,16 +48,38 @@ def on_open(ws):
 def on_message(ws, message):
     global symbols
 
+    # ✅ Debug: print every raw WebSocket message
+    logging.debug(f"[RAW MESSAGE] {message}")
+
     # Handle Socket.IO heartbeat
     if message == "3":
         return
 
-    # Handle handshake
-    if message.startswith("0{"):
+    # Step 2: After handshake, Pocket sends 40 back
+    if message == "40":
+        # Send probe (41)
+        ws.send("41")
+        logging.info("[SEND] Probe (41) ✅")
         return
 
-    # Namespace open confirmation
-    if message == "40":
+    # Step 3: When probe is acknowledged, send auth
+    if message == "41":
+        auth_payload = [
+            "auth",
+            {
+                "sessionToken": sessionToken,
+                "uid": uid,
+                "lang": "en",
+                "currentUrl": "cabinet",
+                "isChart": 1
+            }
+        ]
+        ws.send("42" + json.dumps(auth_payload))
+        logging.info("[SEND] Auth message sent ✅")
+
+        # Step 4: Request assets list after auth
+        ws.send('42["assets/get-assets",{}]')
+        logging.info("[SEND] Requested assets list ✅")
         return
 
     # Custom events
