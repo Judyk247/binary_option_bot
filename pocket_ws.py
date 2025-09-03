@@ -41,8 +41,7 @@ def on_open(ws):
     ws.send("40")
     logging.info("[SEND] Namespace open (40) ✅")
 
-    # ✅ Start heartbeat AFTER successful open
-    threading.Thread(target=send_heartbeat, args=(ws,), daemon=True).start()
+    # ✅ Do NOT start heartbeat yet; wait until auth is sent
 
 
 def on_message(ws, message):
@@ -55,7 +54,7 @@ def on_message(ws, message):
     if message == "3":
         return
 
-    # Step 2: After handshake, Pocket sends 40 back
+    # Step 2: After handshake, server confirms namespace
     if message == "40":
         # Send probe (41)
         ws.send("41")
@@ -70,7 +69,7 @@ def on_message(ws, message):
                 "sessionToken": sessionToken,
                 "uid": uid,
                 "lang": "en",
-                "currentUrl": "cabinet",
+                "currentUrl": "cabinet/demo-quick-high-low",
                 "isChart": 1
             }
         ]
@@ -80,6 +79,9 @@ def on_message(ws, message):
         # Step 4: Request assets list after auth
         ws.send('42["assets/get-assets",{}]')
         logging.info("[SEND] Requested assets list ✅")
+
+        # ✅ Start heartbeat AFTER auth is sent
+        threading.Thread(target=send_heartbeat, args=(ws,), daemon=True).start()
         return
 
     # Custom events
