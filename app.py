@@ -38,7 +38,7 @@ def start_background_workers():
     # Start PocketOption WebSocket
     threading.Thread(
         target=start_pocket_ws,
-        args=(socketio, POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL),
+        args=(socketio),
         daemon=True
     ).start()
 
