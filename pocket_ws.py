@@ -22,8 +22,12 @@ def send_heartbeat(ws):
     """Send periodic ping to keep connection alive."""
     while True:
         try:
-            ws.send("2")  # Standard Socket.IO ping
-            logging.debug("[PING] Keep-alive sent")
+            if ws.sock and ws.sock.connected:
+                ws.send("2")  # Standard Socket.IO ping
+                logging.debug("[PING] Keep-alive sent")
+            else:
+                logging.warning("[PING] WebSocket not connected, skipping ping...")
+                break
         except Exception as e:
             logging.error(f"[PING ERROR] {e}")
             break
@@ -54,6 +58,9 @@ def on_open(ws):
     # Request assets list
     ws.send('42["assets/get-assets",{}]')
     logging.info("[SEND] Requested assets list ✅")
+
+    # ✅ Start heartbeat AFTER successful open
+    threading.Thread(target=send_heartbeat, args=(ws,), daemon=True).start()
 
 
 def on_message(ws, message):
