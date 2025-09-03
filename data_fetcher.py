@@ -25,7 +25,7 @@ last_heartbeat = 0
 symbols = []
 
 
-def send_heartbeat(socketio, POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL):
+def send_heartbeat(ws):
     global last_heartbeat
     while True:
         try:
