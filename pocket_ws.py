@@ -18,7 +18,7 @@ socketio_instance = None
 PING_INTERVAL = 20
 
 
-def send_heartbeat(socketio, POCKET_WS_URL, sessionToken, uid, ACCOUNT_URL):
+def send_heartbeat(ws):
     """Send periodic ping to keep connection alive."""
     while True:
         try:
