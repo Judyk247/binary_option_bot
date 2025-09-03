@@ -48,7 +48,7 @@ def on_open(ws):
             "sessionToken": sessionToken,
             "uid": uid,
             "lang": "en",
-            "currentUrl": ACCOUNT_URL,
+            "currentUrl": "cabinet",
             "isChart": 1
         }
     ]
