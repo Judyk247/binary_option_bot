@@ -12,6 +12,9 @@ from credentials import uid, sessionToken, ACCOUNT_URL, POCKET_WS_URL
 
 # 👇 Import PocketOption WebSocket
 from pocket_ws import start_pocket_ws  
+from pocket_ws import setup_debug_logger
+
+setup_debug_logger()
 
 # Flask app setup
 app = Flask(__name__)
