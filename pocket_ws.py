@@ -6,9 +6,12 @@ import socketio
 
 def setup_debug_logger():
     """Enable full debug logging for Socket.IO and our app."""
-    logging.getLogger().setLevel(logging.DEBUG)
-    sio.logger = True
-    sio.engineio_logger = True
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+
+    logging.getLogger("socketio").setLevel(logging.DEBUG)
+    logging.getLogger("engineio").setLevel(logging.DEBUG)
+
     logging.debug("[DEBUG] Debug logger initialized")
 
 from credentials import uid, sessionToken, ACCOUNT_URL
