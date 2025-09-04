@@ -22,8 +22,14 @@ symbols = []
 # SocketIO instance injected from app.py
 socketio_instance = None
 
-# Socket.IO client
-sio = socketio.Client(logger=False, engineio_logger=False, reconnection=True, reconnection_attempts=0, reconnection_delay=5)
+import logging
+sio = socketio.Client(
+    logger=logging.getLogger("socketio"),
+    engineio_logger=logging.getLogger("engineio"),
+    reconnection=True,
+    reconnection_attempts=0,
+    reconnection_delay=5
+)
 
 # Store market data locally (for reference, optional)
 market_data = {}
