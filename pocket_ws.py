@@ -98,6 +98,17 @@ def handle_candles(data):
     if asset and period:
         market_data.setdefault(asset, {}).setdefault("candles", {}).setdefault(period, []).append(data)
 
+@sio.on("*")
+def catch_all(event, data=None):
+    """Catch-all debug logger for every incoming event."""
+    try:
+        if data is not None:
+            logging.debug(f"[CATCH-ALL] Event: {event} | Data: {str(data)[:500]}")
+        else:
+            logging.debug(f"[CATCH-ALL] Event: {event} (no data)")
+    except Exception as e:
+        logging.error(f"[CATCH-ALL ERROR] {e}")
+
 
 def run_pocket_ws(socketio_from_app):
     global socketio_instance
