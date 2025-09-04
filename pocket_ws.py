@@ -4,6 +4,13 @@ import threading
 import logging
 import socketio
 
+def setup_debug_logger():
+    """Enable full debug logging for Socket.IO and our app."""
+    logging.getLogger().setLevel(logging.DEBUG)
+    sio.logger = True
+    sio.engineio_logger = True
+    logging.debug("[DEBUG] Debug logger initialized")
+
 from credentials import uid, sessionToken, ACCOUNT_URL
 
 # Pocket Option Socket.IO URL
