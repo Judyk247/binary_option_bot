@@ -51,8 +51,8 @@ def connect():
 
     # 🔑 Send auth right after connection
     sio.emit("auth", {
-        "sessionToken": POCKET_SESSION_TOKEN,
-        "uid": POCKET_USER_ID,
+        "sessionToken": sessionToken,
+        "uid": uid,
         "lang": "en",
         "currentUrl": "cabinet",  # <-- update this if your capture changes
         "isChart": 1
