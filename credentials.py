@@ -3,6 +3,7 @@
 # Pocket Option credentials
 sessionToken = "b651d1bb804319e18d46104a66f13197"
 uid = "107618624"
+currentUrl = "cabinet/quick-high-low/NGN"
 ACCOUNT_URL = "https://m.pocketoption.com"
 POCKET_WS_URL = "wss://events-po.com/socket.io/?EIO=4&transport=websocket"
 
