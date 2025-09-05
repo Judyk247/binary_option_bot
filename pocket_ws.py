@@ -14,7 +14,7 @@ def setup_debug_logger():
 
     logging.debug("[DEBUG] Debug logger initialized")
 
-from credentials import uid, sessionToken, ACCOUNT_URL
+from credentials import uid, sessionToken, ACCOUNT_URL, currentUrl
 
 # Pocket Option Socket.IO URL
 POCKET_WS_URL = "https://events-po.com"
@@ -54,7 +54,7 @@ def connect():
         "sessionToken": sessionToken,
         "uid": uid,
         "lang": "en",
-        "currentUrl": "cabinet",  # <-- update this if your capture changes
+        "currentUrl": currentUrl
         "isChart": 1
     })
     logging.info("[AUTH] Auth message sent ✅")
