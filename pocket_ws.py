@@ -50,7 +50,7 @@ def connect():
     logging.info("[CONNECT] Connected to Pocket Option Socket.IO")
 
     # 🔑 Send auth right after connection
-    socketio.emit("auth", {
+    sio.emit("auth", {
         "sessionToken": POCKET_SESSION_TOKEN,
         "uid": POCKET_USER_ID,
         "lang": "en",
@@ -61,7 +61,7 @@ def connect():
 
 
 # ✅ Handle auth success
-@socketio.on("auth/success")
+@sio.on("auth/success")
 def on_auth_success(data=None):
     logging.info("[AUTH] Authenticated successfully ✅")
     # Immediately send counters/all after auth
@@ -70,7 +70,7 @@ def on_auth_success(data=None):
 
 
 # ✅ Handle counters/all/success confirmation
-@socketio.on("counters/all/success")
+@sio.on("counters/all/success")
 def on_counters_success(data):
     logging.info(f"[SUBSCRIBE CONFIRMED] counters/all → {data}")
 
