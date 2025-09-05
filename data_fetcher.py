@@ -49,7 +49,7 @@ def connect():
         "sessionToken": sessionToken,
         "uid": uid,
         "lang": "en",
-        "currentUrl": "cabinet/quick-high-low/NGN",
+        "currentUrl": "cabinet",
         "isChart": 1
     }
     sio.emit("auth", auth_payload)
