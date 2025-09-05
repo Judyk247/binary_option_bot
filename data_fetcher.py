@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import pandas as pd
 import socketio
 
-from credentials import sessionToken, uid, ACCOUNT_URL
+from credentials import sessionToken, uid, ACCOUNT_URL, currentUrl
 from strategy import analyze_candles
 from telegram_utils import send_telegram_message
 from config import TELEGRAM_CHAT_IDS
@@ -49,7 +49,7 @@ def connect():
         "sessionToken": sessionToken,
         "uid": uid,
         "lang": "en",
-        "currentUrl": "cabinet",
+        "currentUrl": currentUrl,
         "isChart": 1
     }
     sio.emit("auth", auth_payload)
