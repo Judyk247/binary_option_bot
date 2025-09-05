@@ -49,21 +49,30 @@ def update_symbols(new_symbols):
 def connect():
     logging.info("[CONNECT] Connected to Pocket Option Socket.IO")
 
-    # Auth after connection
-    auth_payload = {
-        "sessionToken": sessionToken,
-        "uid": uid,
+    # 🔑 Send auth right after connection
+    socketio.emit("auth", {
+        "sessionToken": POCKET_SESSION_TOKEN,
+        "uid": POCKET_USER_ID,
         "lang": "en",
-        "currentUrl": "cabinet/quick-high-low/NGN",
+        "currentUrl": "cabinet",  # <-- update this if your capture changes
         "isChart": 1
-    }
-    sio.emit("auth", auth_payload)
+    })
     logging.info("[AUTH] Auth message sent ✅")
 
-    # Request assets list
-    time.sleep(0.5)
-    sio.emit("assets/get-assets", {})
-    logging.info("[REQUEST] Requested assets list ✅")
+
+# ✅ Handle auth success
+@socketio.on("auth/success")
+def on_auth_success(data=None):
+    logging.info("[AUTH] Authenticated successfully ✅")
+    # Immediately send counters/all after auth
+    socketio.emit("counters/all", {})
+    logging.info("[SUBSCRIBE] Sent counters/all request ✅")
+
+
+# ✅ Handle counters/all/success confirmation
+@socketio.on("counters/all/success")
+def on_counters_success(data):
+    logging.info(f"[SUBSCRIBE CONFIRMED] counters/all → {data}")
 
 
 @sio.event
