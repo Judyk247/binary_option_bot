@@ -54,7 +54,7 @@ def connect():
         "sessionToken": sessionToken,
         "uid": uid,
         "lang": "en",
-        "currentUrl": "cabinet",
+        "currentUrl": "cabinet/quick-high-low/NGN",
         "isChart": 1
     }
     sio.emit("auth", auth_payload)
@@ -132,7 +132,18 @@ def run_pocket_ws(socketio_from_app):
 
     try:
         logging.info("🔌 Connecting to Pocket Option Socket.IO...")
-        sio.connect(POCKET_WS_URL, transports=["websocket"], headers={"Origin": "https://m.pocketoption.com"})
+        sio.connect(
+    POCKET_WS_URL,
+    transports=["websocket"],
+    headers={
+        "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
+        "Origin": "https://m.pocketoption.com",
+        "Pragma": "no-cache",
+        "Cache-Control": "no-cache",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "Accept-Language": "en-US,en;q=0.9,my-ZG;q=0.8,my;q=0.7",
+    }
+)
         sio.wait()
     except Exception as e:
         logging.error(f"[FATAL ERROR] {e}")
